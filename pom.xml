@@ -352,6 +352,7 @@
     <module>testsuite-native-image</module>
     <module>microbench</module>
     <module>bom</module>
+    <module>netty-http</module>
   </modules>
 
   <dependencyManagement>
