@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -36,7 +36,8 @@ import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.concurrent.atomic.AtomicInteger;
+
 
 import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 import static java.lang.Math.min;
@@ -47,8 +48,6 @@ import static java.util.Objects.requireNonNull;
  */
 public class EpollHandler implements IoHandler {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(EpollHandler.class);
-    private static final AtomicIntegerFieldUpdater<EpollHandler> WAKEN_UP_UPDATER =
-            AtomicIntegerFieldUpdater.newUpdater(EpollHandler.class, "wakenUp");
 
     static {
         // Ensure JNI is initialized by the time this class is loaded by this time!
@@ -71,10 +70,10 @@ public class EpollHandler implements IoHandler {
 
     private final SelectStrategy selectStrategy;
     private final IntSupplier selectNowSupplier = this::epollWaitNow;
-    @SuppressWarnings("unused") // AtomicIntegerFieldUpdater
-    private volatile int wakenUp;
+    private final AtomicInteger wakenUp = new AtomicInteger(1);
+    private boolean pendingWakeup;
 
-    // See http://man7.org/linux/man-pages/man2/timerfd_create.2.html.
+    // See https://man7.org/linux/man-pages/man2/timerfd_create.2.html.
     private static final long MAX_SCHEDULED_TIMERFD_NS = 999999999;
 
     private static AbstractEpollChannel cast(Channel channel) {
@@ -217,7 +216,7 @@ public class EpollHandler implements IoHandler {
 
     @Override
     public final void wakeup(boolean inEventLoop) {
-        if (!inEventLoop && WAKEN_UP_UPDATER.getAndSet(this, 1) == 0) {
+        if (!inEventLoop && wakenUp.getAndSet(1) == 0) {
             // write to the evfd which will then wake-up epoll_wait(...)
             Native.eventFdWrite(eventFd.intValue(), 1L);
         }
@@ -280,11 +279,16 @@ public class EpollHandler implements IoHandler {
     }
 
     private int epollWaitNow() throws IOException {
-        return Native.epollWait(epollFd, events, timerFd, 0, 0);
+        return Native.epollWait(epollFd, events, true);
     }
 
     private int epollBusyWait() throws IOException {
         return Native.epollBusyWait(epollFd, events);
+    }
+
+    private int epollWaitTimeboxed() throws IOException {
+        // Wait with 1 second "safeguard" timeout
+        return Native.epollWait(epollFd, events, 1000);
     }
 
     @Override
@@ -294,22 +298,43 @@ public class EpollHandler implements IoHandler {
             int strategy = selectStrategy.calculateStrategy(selectNowSupplier, !context.canBlock());
             switch (strategy) {
                 case SelectStrategy.CONTINUE:
-                    return 0 ;
+                    return 0;
 
                 case SelectStrategy.BUSY_WAIT:
                     strategy = epollBusyWait();
                     break;
 
                 case SelectStrategy.SELECT:
-                    if (wakenUp == 1) {
-                        Native.eventFdWrite(eventFd.intValue(), 1L);
-                        wakenUp = 0;
-                    }
-                    if (context.canBlock()) {
-                        strategy = epollWait(context);
+                    if (pendingWakeup) {
+                        // We are going to be immediately woken so no need to reset wakenUp
+                        // or check for timerfd adjustment.
+                        strategy = epollWaitTimeboxed();
+                        if (strategy != 0) {
+                            break;
+                        }
+                        // We timed out so assume that we missed the write event due to an
+                        // abnormally failed syscall (the write itself or a prior epoll_wait)
+                        logger.warn("Missed eventfd write (not seen after > 1 second)");
+                        pendingWakeup = false;
+                        if (!context.canBlock()) {
+                            break;
+                        }
+                        // fall-through
                     }
 
-                    // fallthrough
+                    wakenUp.set(0);
+                    try {
+                        if (context.canBlock()) {
+                            strategy = epollWait(context);
+                        }
+                    } finally {
+                        // Try get() first to avoid much more expensive CAS in the case we
+                        // were woken via the wakeup() method (submitted task)
+                        if (wakenUp.get() == 1 || wakenUp.getAndSet(1) == 1) {
+                            pendingWakeup = true;
+                        }
+                    }
+                    // fall-through
                 default:
             }
             if (strategy > 0) {
@@ -320,6 +345,8 @@ public class EpollHandler implements IoHandler {
                 //increase the size of the array as we needed the whole space for the events
                 events.increase();
             }
+        } catch (Error error) {
+            throw error;
         } catch (Throwable t) {
             handleLoopException(t);
         }
@@ -343,12 +370,6 @@ public class EpollHandler implements IoHandler {
 
     @Override
     public void prepareToDestroy() {
-        try {
-            epollWaitNow();
-        } catch (IOException ignore) {
-            // ignore on close
-        }
-
         // Using the intermediate collection to prevent ConcurrentModificationException.
         // In the `close()` method, the channel is deleted from `channels` map.
         AbstractEpollChannel[] localChannels = channels.values().toArray(new AbstractEpollChannel[0]);
@@ -361,7 +382,9 @@ public class EpollHandler implements IoHandler {
     private void processReady(EpollEventArray events, int ready) {
         for (int i = 0; i < ready; i ++) {
             final int fd = events.fd(i);
-            if (fd == eventFd.intValue() || fd == timerFd.intValue()) {
+            if (fd == eventFd.intValue()) {
+                pendingWakeup = false;
+            } else if (fd == timerFd.intValue()) {
                 // Just ignore as we use ET mode for the eventfd and timerfd.
                 //
                 // See also https://stackoverflow.com/a/12492308/1074097
@@ -423,10 +446,23 @@ public class EpollHandler implements IoHandler {
     @Override
     public final void destroy() {
         try {
-            try {
-                epollFd.close();
-            } catch (IOException e) {
-                logger.warn("Failed to close the epoll fd.", e);
+            // Ensure any in-flight wakeup writes have been performed prior to closing eventFd.
+            while (pendingWakeup) {
+                try {
+                    int count = epollWaitTimeboxed();
+                    if (count == 0) {
+                        // We timed-out so assume that the write we're expecting isn't coming
+                        break;
+                    }
+                    for (int i = 0; i < count; i++) {
+                        if (events.fd(i) == eventFd.intValue()) {
+                            pendingWakeup = false;
+                            break;
+                        }
+                    }
+                } catch (IOException ignore) {
+                    // ignore
+                }
             }
             try {
                 eventFd.close();
@@ -437,6 +473,11 @@ public class EpollHandler implements IoHandler {
                 timerFd.close();
             } catch (IOException e) {
                 logger.warn("Failed to close the timer fd.", e);
+            }
+            try {
+                epollFd.close();
+            } catch (IOException e) {
+                logger.warn("Failed to close the epoll fd.", e);
             }
         } finally {
             // release native memory

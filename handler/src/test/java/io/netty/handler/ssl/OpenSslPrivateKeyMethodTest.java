@@ -5,7 +5,7 @@
  * 2.0 (the "License"); you may not use this file except in compliance with the
  * License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -62,15 +62,14 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.netty.handler.ssl.OpenSslTestUtils.checkShouldUseKeyManagerFactory;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
@@ -100,12 +99,7 @@ public class OpenSslPrivateKeyMethodTest {
 
         GROUP = new MultithreadEventLoopGroup(LocalHandler.newFactory());
         CERT = new SelfSignedCertificate();
-        EXECUTOR = Executors.newCachedThreadPool(new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                return new DelegateThread(r);
-            }
-        });
+        EXECUTOR = Executors.newCachedThreadPool(DelegateThread::new);
     }
 
     @AfterClass
@@ -240,7 +234,7 @@ public class OpenSslPrivateKeyMethodTest {
                             }
 
                             @Override
-                            public void channelRead0(ChannelHandlerContext ctx, Object msg) {
+                            public void messageReceived(ChannelHandlerContext ctx, Object msg) {
                                 if (serverPromise.trySuccess(null)) {
                                     ctx.writeAndFlush(Unpooled.wrappedBuffer(new byte[] {'P', 'O', 'N', 'G'}));
                                 }
@@ -276,7 +270,7 @@ public class OpenSslPrivateKeyMethodTest {
                                 }
 
                                 @Override
-                                public void channelRead0(ChannelHandlerContext ctx, Object msg) {
+                                public void messageReceived(ChannelHandlerContext ctx, Object msg) {
                                     clientPromise.trySuccess(null);
                                     ctx.close();
                                 }

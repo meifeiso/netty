@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -229,6 +229,26 @@ public class DefaultDnsRecordDecoderTest {
             if (rawUncompressedIndexedRecord != null) {
                 rawUncompressedIndexedRecord.release();
             }
+            buffer.release();
+        }
+    }
+
+    @Test
+    public void testTruncatedPacket() throws Exception {
+        ByteBuf buffer = Unpooled.buffer();
+        buffer.writeByte(0);
+        buffer.writeShort(DnsRecordType.A.intValue());
+        buffer.writeShort(1);
+        buffer.writeInt(32);
+
+        // Write a truncated last value.
+        buffer.writeByte(0);
+        DefaultDnsRecordDecoder decoder = new DefaultDnsRecordDecoder();
+        try {
+            int readerIndex = buffer.readerIndex();
+            assertNull(decoder.decodeRecord(buffer));
+            assertEquals(readerIndex, buffer.readerIndex());
+        } finally {
             buffer.release();
         }
     }

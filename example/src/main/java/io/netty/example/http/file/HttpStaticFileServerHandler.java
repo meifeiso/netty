@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -62,7 +62,7 @@ import static io.netty.handler.codec.http.HttpVersion.*;
  * A simple handler that serves incoming HTTP requests to send their respective
  * HTTP responses.  It also implements {@code 'If-Modified-Since'} header to
  * take advantage of browser cache, as described in
- * <a href="http://tools.ietf.org/html/rfc2616#section-14.25">RFC 2616</a>.
+ * <a href="https://tools.ietf.org/html/rfc2616#section-14.25">RFC 2616</a>.
  *
  * <h3>How Browser Caching Works</h3>
  *
@@ -113,7 +113,7 @@ public class HttpStaticFileServerHandler extends SimpleChannelInboundHandler<Ful
     private FullHttpRequest request;
 
     @Override
-    public void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
+    public void messageReceived(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
         this.request = request;
         if (!request.decoderResult().isSuccess()) {
             sendError(ctx, BAD_REQUEST);
@@ -286,21 +286,24 @@ public class HttpStaticFileServerHandler extends SimpleChannelInboundHandler<Ful
             .append("<ul>")
             .append("<li><a href=\"../\">..</a></li>\r\n");
 
-        for (File f: dir.listFiles()) {
-            if (f.isHidden() || !f.canRead()) {
-                continue;
-            }
+        File[] files = dir.listFiles();
+        if (files != null) {
+            for (File f: files) {
+                if (f.isHidden() || !f.canRead()) {
+                    continue;
+                }
 
-            String name = f.getName();
-            if (!ALLOWED_FILE_NAME.matcher(name).matches()) {
-                continue;
-            }
+                String name = f.getName();
+                if (!ALLOWED_FILE_NAME.matcher(name).matches()) {
+                    continue;
+                }
 
-            buf.append("<li><a href=\"")
-               .append(name)
-               .append("\">")
-               .append(name)
-               .append("</a></li>\r\n");
+                buf.append("<li><a href=\"")
+                .append(name)
+                .append("\">")
+                .append(name)
+                .append("</a></li>\r\n");
+            }
         }
 
         buf.append("</ul></body></html>\r\n");

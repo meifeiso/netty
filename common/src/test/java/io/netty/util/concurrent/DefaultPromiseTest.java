@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -38,6 +38,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.lang.Math.max;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.lessThan;
 import static org.junit.Assert.*;
 
@@ -71,7 +73,7 @@ public class DefaultPromiseTest {
         Mockito.when(executor.inEventLoop()).thenReturn(false);
 
         Promise<Void> promise = new DefaultPromise<Void>(executor);
-        promise.cancel(false);
+        assertTrue(promise.cancel(false));
         Mockito.verify(executor, Mockito.never()).execute(Mockito.any(Runnable.class));
         assertTrue(promise.isCancelled());
     }
@@ -103,7 +105,7 @@ public class DefaultPromiseTest {
     @Test(expected = CancellationException.class)
     public void testCancellationExceptionIsThrownWhenBlockingGet() throws InterruptedException, ExecutionException {
         final Promise<Void> promise = new DefaultPromise<>(ImmediateEventExecutor.INSTANCE);
-        promise.cancel(false);
+        assertTrue(promise.cancel(false));
         promise.get();
     }
 
@@ -111,8 +113,16 @@ public class DefaultPromiseTest {
     public void testCancellationExceptionIsThrownWhenBlockingGetWithTimeout() throws InterruptedException,
             ExecutionException, TimeoutException {
         final Promise<Void> promise = new DefaultPromise<>(ImmediateEventExecutor.INSTANCE);
-        promise.cancel(false);
+        assertTrue(promise.cancel(false));
         promise.get(1, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void testCancellationExceptionIsReturnedAsCause() throws InterruptedException,
+    ExecutionException, TimeoutException {
+        final Promise<Void> promise = new DefaultPromise<>(ImmediateEventExecutor.INSTANCE);
+        assertTrue(promise.cancel(false));
+        assertThat(promise.cause(), instanceOf(CancellationException.class));
     }
 
     @Test
@@ -414,7 +424,9 @@ public class DefaultPromiseTest {
         try {
             final AtomicInteger state = new AtomicInteger();
             final CountDownLatch latch1 = new CountDownLatch(1);
-            final CountDownLatch latch2 = new CountDownLatch(2);
+            final CountDownLatch latch2 = new CountDownLatch(1);
+            final CountDownLatch latch3 = new CountDownLatch(1);
+
             final Promise<Void> promise = new DefaultPromise<>(executor);
 
             // Add a listener before completion so "lateListener" is used next time we add a listener.
@@ -443,15 +455,16 @@ public class DefaultPromiseTest {
                 assertTrue(state.compareAndSet(2, 3));
                 latch2.countDown();
             }));
+            latch2.await();
 
             // Simulate a read operation being queued up in the executor.
             executor.execute(() -> {
                 // This is the key, we depend upon the state being set in the next listener.
                 assertEquals(3, state.get());
-                latch2.countDown();
+                latch3.countDown();
             });
 
-            latch2.await();
+            latch3.await();
         } finally {
             executor.shutdownGracefully(0, 0, TimeUnit.SECONDS).sync();
         }

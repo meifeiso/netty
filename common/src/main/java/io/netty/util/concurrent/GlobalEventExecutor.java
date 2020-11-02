@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -93,7 +93,7 @@ public final class GlobalEventExecutor extends AbstractScheduledEventExecutor im
                 return task;
             } else {
                 long delayNanos = scheduledTask.delayNanos();
-                Runnable task;
+                Runnable task = null;
                 if (delayNanos > 0) {
                     try {
                         task = taskQueue.poll(delayNanos, TimeUnit.NANOSECONDS);
@@ -101,11 +101,12 @@ public final class GlobalEventExecutor extends AbstractScheduledEventExecutor im
                         // Waken up.
                         return null;
                     }
-                } else {
-                    task = taskQueue.poll();
                 }
-
                 if (task == null) {
+                    // We need to fetch the scheduled tasks now as otherwise there may be a chance that
+                    // scheduled tasks are never executed if there is always one task in the taskQueue.
+                    // This is for example true for the read task of OIO Transport
+                    // See https://github.com/netty/netty/issues/1614
                     fetchFromScheduledTaskQueue();
                     task = taskQueue.poll();
                 }

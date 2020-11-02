@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -53,6 +53,10 @@ public abstract class OpenSslSessionContext implements SSLSessionContext {
         stats = new OpenSslSessionStats(context);
     }
 
+    final boolean useKeyManager() {
+        return provider != null;
+    }
+
     @Override
     public SSLSession getSession(byte[] bytes) {
         requireNonNull(bytes, "bytes");
@@ -94,7 +98,10 @@ public abstract class OpenSslSessionContext implements SSLSessionContext {
     }
 
     /**
-     * Sets the SSL session ticket keys of this context.
+     * Sets the SSL session ticket keys of this context. Depending on the underlying native library you may omit the
+     * argument or pass an empty array and so let the native library handle the key generation and rotating for you.
+     * If this is supported by the underlying native library should be checked in this case. For example
+     * <a href="https://boringssl.googlesource.com/boringssl/">BoringSSL</a> is known to support this.
      */
     public void setTicketKeys(OpenSslSessionTicketKey... keys) {
         requireNonNull(keys, "keys");
@@ -106,7 +113,9 @@ public abstract class OpenSslSessionContext implements SSLSessionContext {
         writerLock.lock();
         try {
             SSLContext.clearOptions(context.ctx, SSL.SSL_OP_NO_TICKET);
-            SSLContext.setSessionTicketKeys(context.ctx, ticketKeys);
+            if (ticketKeys.length > 0) {
+                SSLContext.setSessionTicketKeys(context.ctx, ticketKeys);
+            }
         } finally {
             writerLock.unlock();
         }

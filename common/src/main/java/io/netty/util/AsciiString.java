@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -532,7 +532,7 @@ public final class AsciiString implements CharSequence, Comparable<CharSequence>
 
         if (string instanceof AsciiString) {
             AsciiString rhs = (AsciiString) string;
-            for (int i = arrayOffset(), j = rhs.arrayOffset(); i < length(); ++i, ++j) {
+            for (int i = arrayOffset(), j = rhs.arrayOffset(), end = i + length(); i < end; ++i, ++j) {
                 if (!equalsIgnoreCase(value[i], rhs.value[j])) {
                     return false;
                 }
@@ -540,7 +540,7 @@ public final class AsciiString implements CharSequence, Comparable<CharSequence>
             return true;
         }
 
-        for (int i = arrayOffset(), j = 0; i < length(); ++i, ++j) {
+        for (int i = arrayOffset(), j = 0, end = length(); j < end; ++i, ++j) {
             if (!equalsIgnoreCase(b2c(value[i]), string.charAt(j))) {
                 return false;
             }

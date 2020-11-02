@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,6 +24,8 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectedListenerFailureBehavior;
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectorFailureBehavior;
+import io.netty.util.AttributeMap;
+import io.netty.util.DefaultAttributeMap;
 import io.netty.util.internal.EmptyArrays;
 
 import java.security.Provider;
@@ -97,6 +99,7 @@ public abstract class SslContext {
     }
 
     private final boolean startTls;
+    private final AttributeMap attributes = new DefaultAttributeMap();
 
     /**
      * Returns the default server-side implementation provider currently in use.
@@ -860,6 +863,13 @@ public abstract class SslContext {
      */
     protected SslContext(boolean startTls) {
         this.startTls = startTls;
+    }
+
+    /**
+     * Returns the {@link AttributeMap} that belongs to this {@link SslContext} .
+     */
+    public final AttributeMap attributes() {
+        return attributes;
     }
 
     /**

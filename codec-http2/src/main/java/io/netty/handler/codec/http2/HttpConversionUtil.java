@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -92,24 +92,24 @@ public final class HttpConversionUtil {
 
     /**
      * This will be the method used for {@link HttpRequest} objects generated out of the HTTP message flow defined in <a
-     * href="http://tools.ietf.org/html/draft-ietf-httpbis-http2-16#section-8.1.">HTTP/2 Spec Message Flow</a>
+     * href="https://tools.ietf.org/html/rfc7540#section-8.1">[RFC 7540], Section 8.1</a>
      */
     public static final HttpMethod OUT_OF_MESSAGE_SEQUENCE_METHOD = HttpMethod.OPTIONS;
 
     /**
      * This will be the path used for {@link HttpRequest} objects generated out of the HTTP message flow defined in <a
-     * href="http://tools.ietf.org/html/draft-ietf-httpbis-http2-16#section-8.1.">HTTP/2 Spec Message Flow</a>
+     * href="https://tools.ietf.org/html/rfc7540#section-8.1">[RFC 7540], Section 8.1</a>
      */
     public static final String OUT_OF_MESSAGE_SEQUENCE_PATH = "";
 
     /**
      * This will be the status code used for {@link HttpResponse} objects generated out of the HTTP message flow defined
-     * in <a href="http://tools.ietf.org/html/draft-ietf-httpbis-http2-16#section-8.1.">HTTP/2 Spec Message Flow</a>
+     * in <a href="https://tools.ietf.org/html/rfc7540#section-8.1">[RFC 7540], Section 8.1</a>
      */
     public static final HttpResponseStatus OUT_OF_MESSAGE_SEQUENCE_RETURN_CODE = HttpResponseStatus.OK;
 
     /**
-     * <a href="https://tools.ietf.org/html/rfc7540#section-8.1.2.3">rfc7540, 8.1.2.3</a> states the path must not
+     * <a href="https://tools.ietf.org/html/rfc7540#section-8.1.2.3">[RFC 7540], 8.1.2.3</a> states the path must not
      * be empty, and instead should be {@code /}.
      */
     private static final AsciiString EMPTY_REQUEST_PATH = AsciiString.cached("/");
@@ -122,28 +122,28 @@ public final class HttpConversionUtil {
      */
     public enum ExtensionHeaderNames {
         /**
-         * HTTP extension header which will identify the stream id from the HTTP/2 event(s) responsible for generating a
-         * {@code HttpObject}
+         * HTTP extension header which will identify the stream id from the HTTP/2 event(s) responsible for
+         * generating an {@code HttpObject}
          * <p>
          * {@code "x-http2-stream-id"}
          */
         STREAM_ID("x-http2-stream-id"),
         /**
          * HTTP extension header which will identify the scheme pseudo header from the HTTP/2 event(s) responsible for
-         * generating a {@code HttpObject}
+         * generating an {@code HttpObject}
          * <p>
          * {@code "x-http2-scheme"}
          */
         SCHEME("x-http2-scheme"),
         /**
          * HTTP extension header which will identify the path pseudo header from the HTTP/2 event(s) responsible for
-         * generating a {@code HttpObject}
+         * generating an {@code HttpObject}
          * <p>
          * {@code "x-http2-path"}
          */
         PATH("x-http2-path"),
         /**
-         * HTTP extension header which will identify the stream id used to create this stream in a HTTP/2 push promise
+         * HTTP extension header which will identify the stream id used to create this stream in an HTTP/2 push promise
          * frame
          * <p>
          * {@code "x-http2-stream-promise-id"}
@@ -158,7 +158,7 @@ public final class HttpConversionUtil {
         STREAM_DEPENDENCY_ID("x-http2-stream-dependency-id"),
         /**
          * HTTP extension header which will identify the weight (if non-default and the priority is not on the default
-         * stream) of the associated HTTP/2 stream responsible responsible for generating a {@code HttpObject}
+         * stream) of the associated HTTP/2 stream responsible responsible for generating an {@code HttpObject}
          * <p>
          * {@code "x-http2-stream-weight"}
          */
@@ -331,15 +331,15 @@ public final class HttpConversionUtil {
      * Translate and add HTTP/2 headers to HTTP/1.x headers.
      *
      * @param streamId The stream associated with {@code sourceHeaders}.
-     * @param sourceHeaders The HTTP/2 headers to convert.
+     * @param inputHeaders The HTTP/2 headers to convert.
      * @param destinationMessage The object which will contain the resulting HTTP/1.x headers.
      * @param addToTrailer {@code true} to add to trailing headers. {@code false} to add to initial headers.
      * @throws Http2Exception If not all HTTP/2 headers can be translated to HTTP/1.x.
      * @see #addHttp2ToHttpHeaders(int, Http2Headers, HttpHeaders, HttpVersion, boolean, boolean)
      */
-    public static void addHttp2ToHttpHeaders(int streamId, Http2Headers sourceHeaders,
+    public static void addHttp2ToHttpHeaders(int streamId, Http2Headers inputHeaders,
                     FullHttpMessage destinationMessage, boolean addToTrailer) throws Http2Exception {
-        addHttp2ToHttpHeaders(streamId, sourceHeaders,
+        addHttp2ToHttpHeaders(streamId, inputHeaders,
                 addToTrailer ? destinationMessage.trailingHeaders() : destinationMessage.headers(),
                 destinationMessage.protocolVersion(), addToTrailer, destinationMessage instanceof HttpRequest);
     }
@@ -519,7 +519,7 @@ public final class HttpConversionUtil {
     }
 
     /**
-     * Generate a HTTP/2 {code :path} from a URI in accordance with
+     * Generate an HTTP/2 {code :path} from a URI in accordance with
      * <a href="https://tools.ietf.org/html/rfc7230#section-5.3">rfc7230, 5.3</a>.
      */
     private static AsciiString toHttp2Path(URI uri) {
@@ -619,7 +619,7 @@ public final class HttpConversionUtil {
             translations = request ? REQUEST_HEADER_TRANSLATIONS : RESPONSE_HEADER_TRANSLATIONS;
         }
 
-        public void translateHeaders(Iterable<Entry<CharSequence, CharSequence>> inputHeaders) throws Http2Exception {
+        void translateHeaders(Iterable<Entry<CharSequence, CharSequence>> inputHeaders) throws Http2Exception {
             // lazily created as needed
             StringBuilder cookies = null;
 
@@ -653,9 +653,6 @@ public final class HttpConversionUtil {
             if (cookies != null) {
                 output.add(COOKIE, cookies.toString());
             }
-        }
-
-        private void translateHeader(Entry<CharSequence, CharSequence> entry) throws Http2Exception {
         }
     }
 }

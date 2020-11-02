@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -25,6 +25,7 @@ import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.io.IOException;
+import java.nio.channels.Selector;
 import java.util.Locale;
 
 import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.epollerr;
@@ -32,6 +33,7 @@ import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.epolle
 import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.epollin;
 import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.epollout;
 import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.epollrdhup;
+import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.isSupportingRecvmmsg;
 import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.isSupportingSendmmsg;
 import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.isSupportingTcpFastopen;
 import static io.netty.channel.epoll.NativeStaticallyReferencedJniMethods.kernelVersion;
@@ -48,6 +50,16 @@ public final class Native {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(Native.class);
 
     static {
+        Selector selector = null;
+        try {
+            // We call Selector.open() as this will under the hood cause IOUtil to be loaded.
+            // This is a workaround for a possible classloader deadlock that could happen otherwise:
+            //
+            // See https://github.com/netty/netty/issues/10187
+            selector = Selector.open();
+        } catch (IOException ignore) {
+            // Just ignore
+        }
         try {
             // First, try calling a side-effect free JNI method to see if the library was already
             // loaded by the application.
@@ -55,6 +67,14 @@ public final class Native {
         } catch (UnsatisfiedLinkError ignore) {
             // The library was not previously loaded, load it now.
             loadNativeLibrary();
+        } finally {
+            try {
+                if (selector != null) {
+                    selector.close();
+                }
+            } catch (IOException ignore) {
+                // Just ignore
+            }
         }
         Socket.initialize();
     }
@@ -67,6 +87,8 @@ public final class Native {
     public static final int EPOLLERR = epollerr();
 
     public static final boolean IS_SUPPORTING_SENDMMSG = isSupportingSendmmsg();
+    static final boolean IS_SUPPORTING_RECVMMSG = isSupportingRecvmmsg();
+
     public static final boolean IS_SUPPORTING_TCP_FASTOPEN = isSupportingTcpFastopen();
     public static final int TCP_MD5SIG_MAXKEYLEN = tcpMd5SigMaxKeyLen();
     public static final String KERNEL_VERSION = kernelVersion();
@@ -91,6 +113,10 @@ public final class Native {
 
     private static native int epollCreate();
 
+    /**
+     * @deprecated this method is no longer supported. This functionality is internal to this package.
+     */
+    @Deprecated
     public static int epollWait(FileDescriptor epollFd, EpollEventArray events, FileDescriptor timerFd,
                                 int timeoutSec, int timeoutNs) throws IOException {
         int ready = epollWait0(epollFd.intValue(), events.memoryAddress(), events.length(), timerFd.intValue(),
@@ -100,7 +126,21 @@ public final class Native {
         }
         return ready;
     }
-    private static native int epollWait0(int efd, long address, int len, int timerFd, int timeoutSec, int timeoutNs);
+
+    static int epollWait(FileDescriptor epollFd, EpollEventArray events, boolean immediatePoll) throws IOException {
+        return epollWait(epollFd, events, immediatePoll ? 0 : -1);
+    }
+
+    /**
+     * This uses epoll's own timeout and does not reset/re-arm any timerfd
+     */
+    static int epollWait(FileDescriptor epollFd, EpollEventArray events, int timeoutMillis) throws IOException {
+        int ready = epollWait(epollFd.intValue(), events.memoryAddress(), events.length(), timeoutMillis);
+        if (ready < 0) {
+            throw newIOException("epoll_wait", ready);
+        }
+        return ready;
+    }
 
     /**
      * Non-blocking variant of
@@ -115,6 +155,8 @@ public final class Native {
         return ready;
     }
 
+    private static native int epollWait0(int efd, long address, int len, int timerFd, int timeoutSec, int timeoutNs);
+    private static native int epollWait(int efd, long address, int len, int timeout);
     private static native int epollBusyWait0(int efd, long address, int len);
 
     public static void epollCtlAdd(int efd, final int fd, final int flags) throws IOException {
@@ -141,17 +183,6 @@ public final class Native {
     }
     private static native int epollCtlDel0(int efd, int fd);
 
-    // File-descriptor operations
-    public static int splice(int fd, long offIn, int fdOut, long offOut, long len) throws IOException {
-        int res = splice0(fd, offIn, fdOut, offOut, len);
-        if (res >= 0) {
-            return res;
-        }
-        return ioResult("splice", res);
-    }
-
-    private static native int splice0(int fd, long offIn, int fdOut, long offOut, long len);
-
     @Deprecated
     public static int sendmmsg(int fd, NativeDatagramPacketArray.NativeDatagramPacket[] msgs,
                                int offset, int len) throws IOException {
@@ -168,6 +199,18 @@ public final class Native {
     }
 
     private static native int sendmmsg0(
+            int fd, boolean ipv6, NativeDatagramPacketArray.NativeDatagramPacket[] msgs, int offset, int len);
+
+    static int recvmmsg(int fd, boolean ipv6, NativeDatagramPacketArray.NativeDatagramPacket[] msgs,
+                        int offset, int len) throws IOException {
+        int res = recvmmsg0(fd, ipv6, msgs, offset, len);
+        if (res >= 0) {
+            return res;
+        }
+        return ioResult("recvmmsg", res);
+    }
+
+    private static native int recvmmsg0(
             int fd, boolean ipv6, NativeDatagramPacketArray.NativeDatagramPacket[] msgs, int offset, int len);
 
     // epoll_event related

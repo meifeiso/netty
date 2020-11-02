@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -30,6 +30,7 @@ import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.*;
 
 public class HttpContentCompressorTest {
@@ -497,6 +498,39 @@ public class HttpContentCompressorTest {
         assertTrue(ch.writeOutbound(res1024));
         DefaultHttpResponse response1024 = ch.readOutbound();
         assertThat(response1024.headers().get(HttpHeaderNames.CONTENT_ENCODING), is("gzip"));
+        assertTrue(ch.finishAndReleaseAll());
+    }
+
+    @Test
+    public void testMultipleAcceptEncodingHeaders() {
+        FullHttpRequest request = newRequest();
+        request.headers().set(HttpHeaderNames.ACCEPT_ENCODING, "unknown; q=1.0")
+               .add(HttpHeaderNames.ACCEPT_ENCODING, "gzip; q=0.5")
+               .add(HttpHeaderNames.ACCEPT_ENCODING, "deflate; q=0");
+
+        EmbeddedChannel ch = new EmbeddedChannel(new HttpContentCompressor());
+
+        assertTrue(ch.writeInbound(request));
+
+        FullHttpResponse res = new DefaultFullHttpResponse(
+                HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
+                Unpooled.copiedBuffer("Gzip Win", CharsetUtil.US_ASCII));
+        assertTrue(ch.writeOutbound(res));
+
+        assertEncodedResponse(ch);
+        HttpContent c = ch.readOutbound();
+        assertThat(ByteBufUtil.hexDump(c.content()), is("1f8b080000000000000072afca2c5008cfcc03000000ffff"));
+        c.release();
+
+        c = ch.readOutbound();
+        assertThat(ByteBufUtil.hexDump(c.content()), is("03001f2ebf0f08000000"));
+        c.release();
+
+        LastHttpContent last = ch.readOutbound();
+        assertThat(last.content().readableBytes(), is(0));
+        last.release();
+
+        assertThat(ch.readOutbound(), is(nullValue()));
         assertTrue(ch.finishAndReleaseAll());
     }
 
