@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,16 +22,10 @@ package io.netty.util.concurrent;
 public interface RunnableFuture<V> extends java.util.concurrent.RunnableFuture<V>, Future<V> {
 
     @Override
-    RunnableFuture<V> addListener(GenericFutureListener<? extends Future<? super V>> listener);
+    RunnableFuture<V> addListener(FutureListener<? super V> listener);
 
     @Override
-    RunnableFuture<V> addListeners(GenericFutureListener<? extends Future<? super V>>... listeners);
-
-    @Override
-    RunnableFuture<V> removeListener(GenericFutureListener<? extends Future<? super V>> listener);
-
-    @Override
-    RunnableFuture<V> removeListeners(GenericFutureListener<? extends Future<? super V>>... listeners);
+    <C> RunnableFuture<V> addListener(C context, FutureContextListener<? super C, ? super V> listener);
 
     @Override
     RunnableFuture<V> sync() throws InterruptedException;

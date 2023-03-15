@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -15,9 +15,9 @@
 package io.netty.handler.codec.http2;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.UnstableApi;
 
 /**
@@ -29,19 +29,19 @@ public interface Http2LifecycleManager {
 
     /**
      * Closes the local side of the {@code stream}. Depending on the {@code stream} state this may result in
-     * {@code stream} being closed. See {@link #closeStream(Http2Stream, ChannelFuture)}.
+     * {@code stream} being closed. See {@link #closeStream(Http2Stream, Future)}.
      * @param stream the stream to be half closed.
-     * @param future See {@link #closeStream(Http2Stream, ChannelFuture)}.
+     * @param future See {@link #closeStream(Http2Stream, Future)}.
      */
-    void closeStreamLocal(Http2Stream stream, ChannelFuture future);
+    void closeStreamLocal(Http2Stream stream, Future<Void> future);
 
     /**
      * Closes the remote side of the {@code stream}. Depending on the {@code stream} state this may result in
-     * {@code stream} being closed. See {@link #closeStream(Http2Stream, ChannelFuture)}.
+     * {@code stream} being closed. See {@link #closeStream(Http2Stream, Future)}.
      * @param stream the stream to be half closed.
-     * @param future See {@link #closeStream(Http2Stream, ChannelFuture)}.
+     * @param future See {@link #closeStream(Http2Stream, Future)}.
      */
-    void closeStreamRemote(Http2Stream stream, ChannelFuture future);
+    void closeStreamRemote(Http2Stream stream, Future<Void> future);
 
     /**
      * Closes and deactivates the given {@code stream}. A listener is also attached to {@code future} and upon
@@ -50,7 +50,7 @@ public interface Http2LifecycleManager {
      * @param future when completed if {@link Http2Connection#numActiveStreams()} is 0 then the underlying channel
      * will be closed.
      */
-    void closeStream(Http2Stream stream, ChannelFuture future);
+    void closeStream(Http2Stream stream, Future<Void> future);
 
     /**
      * Ensure the stream identified by {@code streamId} is reset. If our local state does not indicate the stream has
@@ -59,13 +59,11 @@ public interface Http2LifecycleManager {
      * @param ctx The context used for communication and buffer allocation if necessary.
      * @param streamId The identifier of the stream to reset.
      * @param errorCode Justification as to why this stream is being reset. See {@link Http2Error}.
-     * @param promise Used to indicate the return status of this operation.
      * @return Will be considered successful when the connection and stream state has been updated, and a
      * {@code RST_STREAM} frame has been sent to the peer. If the stream state has already been updated and a
      * {@code RST_STREAM} frame has been sent then the return status may indicate success immediately.
      */
-    ChannelFuture resetStream(ChannelHandlerContext ctx, int streamId, long errorCode,
-            ChannelPromise promise);
+    Future<Void> resetStream(ChannelHandlerContext ctx, int streamId, long errorCode);
 
     /**
      * Prevents the peer from creating streams and close the connection if {@code errorCode} is not
@@ -78,20 +76,19 @@ public interface Http2LifecycleManager {
      * @param lastStreamId The last stream that the local endpoint is claiming it will accept.
      * @param errorCode The rational as to why the connection is being closed. See {@link Http2Error}.
      * @param debugData For diagnostic purposes (carries no semantic value).
-     * @param promise Used to indicate the return status of this operation.
      * @return Will be considered successful when the connection and stream state has been updated, and a
      * {@code GO_AWAY} frame has been sent to the peer. If the stream state has already been updated and a
      * {@code GO_AWAY} frame has been sent then the return status may indicate success immediately.
      */
-    ChannelFuture goAway(ChannelHandlerContext ctx, int lastStreamId, long errorCode,
-            ByteBuf debugData, ChannelPromise promise);
+    Future<Void> goAway(ChannelHandlerContext ctx, int lastStreamId, long errorCode,
+            ByteBuf debugData);
 
     /**
      * Processes the given error.
      *
      * @param ctx The context used for communication and buffer allocation if necessary.
      * @param outbound {@code true} if the error was caused by an outbound operation and so the corresponding
-     * {@link ChannelPromise} was failed as well.
+     * {@link Promise} was failed as well.
      * @param cause the error.
      */
     void onError(ChannelHandlerContext ctx, boolean outbound, Throwable cause);

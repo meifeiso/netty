@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,17 +15,20 @@
  */
 package io.netty.util;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ResourceLeakDetectorTest {
 
-    @Test(timeout = 60000)
+    @Test
+    @Timeout(value = 60000, unit = TimeUnit.MILLISECONDS)
     public void testConcurrentUsage() throws Throwable {
         final AtomicBoolean finished = new AtomicBoolean();
         final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -34,7 +37,7 @@ public class ResourceLeakDetectorTest {
         final CyclicBarrier barrier = new CyclicBarrier(threads.length);
         for (int i = 0; i < threads.length; i++) {
             Thread t = new Thread(new Runnable() {
-                Queue<LeakAwareResource> resources = new ArrayDeque<>(100);
+                final Queue<LeakAwareResource> resources = new ArrayDeque<>(100);
 
                 @Override
                 public void run() {
@@ -73,8 +76,8 @@ public class ResourceLeakDetectorTest {
                         }
                         boolean closed = r.close();
                         if (checkClosed && !closed) {
-                            error.compareAndSet(null,
-                                    new AssertionError("ResourceLeak.close() returned 'false' but expected 'true'"));
+                            error.compareAndSet(null, new AssertionError(
+                                    "ResourceLeakTracker.close() returned 'false' but expected 'true'"));
                             return true;
                         }
                     }
@@ -118,8 +121,7 @@ public class ResourceLeakDetectorTest {
 
     private static final class DefaultResource implements Resource {
         // Sample every allocation
-        static final TestResourceLeakDetector<Resource> detector = new TestResourceLeakDetector<>(
-                Resource.class, 1, Integer.MAX_VALUE);
+        static final TestResourceLeakDetector<Resource> detector = new TestResourceLeakDetector<>(Resource.class, 1);
 
         @Override
         public boolean close() {
@@ -142,8 +144,8 @@ public class ResourceLeakDetectorTest {
 
         private final AtomicReference<Throwable> error = new AtomicReference<>();
 
-        TestResourceLeakDetector(Class<?> resourceType, int samplingInterval, long maxActive) {
-            super(resourceType, samplingInterval, maxActive);
+        TestResourceLeakDetector(Class<?> resourceType, int samplingInterval) {
+            super(resourceType, samplingInterval);
         }
 
         @Override

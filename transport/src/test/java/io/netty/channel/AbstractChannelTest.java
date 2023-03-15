@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
 
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,16 +15,26 @@
  */
 package io.netty.channel;
 
+import io.netty.util.NetUtil;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.ImmediateEventExecutor;
+import io.netty.util.concurrent.Promise;
+import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 
-import io.netty.util.NetUtil;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class AbstractChannelTest {
 
@@ -36,7 +46,23 @@ public class AbstractChannelTest {
         when(eventLoop.unsafe()).thenReturn(mock(EventLoop.Unsafe.class));
 
         TestChannel channel = new TestChannel(eventLoop);
-        ChannelHandler handler = mock(ChannelHandler.class);
+        // Using spy as otherwise intelliJ will not be able to understand that we dont want to skip the handler
+        ChannelHandler handler = spy(new ChannelHandler() {
+            @Override
+            public void handlerAdded(ChannelHandlerContext ctx) {
+                // NOOP
+            }
+
+            @Override
+            public void channelRegistered(ChannelHandlerContext ctx) {
+                ctx.fireChannelRegistered();
+            }
+
+            @Override
+            public void channelActive(ChannelHandlerContext ctx) {
+                ctx.fireChannelActive();
+            }
+        });
         channel.pipeline().addLast(handler);
 
         registerChannel(channel);
@@ -52,6 +78,7 @@ public class AbstractChannelTest {
         // This allows us to have a single-threaded test
         when(eventLoop.inEventLoop()).thenReturn(true);
         when(eventLoop.unsafe()).thenReturn(mock(EventLoop.Unsafe.class));
+        when(eventLoop.newPromise()).thenReturn(ImmediateEventExecutor.INSTANCE.newPromise());
 
         doAnswer(invocationOnMock -> {
             ((Runnable) invocationOnMock.getArgument(0)).run();
@@ -59,19 +86,35 @@ public class AbstractChannelTest {
         }).when(eventLoop).execute(any(Runnable.class));
 
         final TestChannel channel = new TestChannel(eventLoop);
-        ChannelHandler handler = mock(ChannelHandler.class);
+        // Using spy as otherwise intelliJ will not be able to understand that we dont want to skip the handler
+        ChannelHandler handler = spy(new ChannelHandler() {
+            @Override
+            public void channelRegistered(ChannelHandlerContext ctx) {
+                ctx.fireChannelRegistered();
+            }
+
+            @Override
+            public void channelUnregistered(ChannelHandlerContext ctx) {
+                ctx.fireChannelUnregistered();
+            }
+
+            @Override
+            public void channelActive(ChannelHandlerContext ctx) {
+                ctx.fireChannelActive();
+            }
+        });
 
         channel.pipeline().addLast(handler);
 
         registerChannel(channel);
-        channel.unsafe().deregister(new DefaultChannelPromise(channel));
+        channel.unsafe().deregister(channel.newPromise());
 
         registerChannel(channel);
 
         verify(handler).handlerAdded(any(ChannelHandlerContext.class));
 
         // Should register twice
-        verify(handler,  times(2)) .channelRegistered(any(ChannelHandlerContext.class));
+        verify(handler, times(2)) .channelRegistered(any(ChannelHandlerContext.class));
         verify(handler).channelActive(any(ChannelHandlerContext.class));
         verify(handler).channelUnregistered(any(ChannelHandlerContext.class));
     }
@@ -91,7 +134,7 @@ public class AbstractChannelTest {
         // This allows us to have a single-threaded test
         when(eventLoop.inEventLoop()).thenReturn(true);
         when(eventLoop.unsafe()).thenReturn(mock(EventLoop.Unsafe.class));
-
+        when(eventLoop.newPromise()).thenReturn(ImmediateEventExecutor.INSTANCE.newPromise());
         doAnswer(invocationOnMock -> {
             ((Runnable) invocationOnMock.getArgument(0)).run();
             return null;
@@ -106,9 +149,9 @@ public class AbstractChannelTest {
                 return new AbstractUnsafe() {
                     @Override
                     public void connect(
-                            SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
+                            SocketAddress remoteAddress, SocketAddress localAddress, Promise<Void> promise) {
                         active = true;
-                        promise.setSuccess();
+                        promise.setSuccess(null);
                     }
                 };
             }
@@ -148,7 +191,7 @@ public class AbstractChannelTest {
         }
     }
 
-    private static void assertClosedChannelException(ChannelFuture future, IOException expected)
+    private static void assertClosedChannelException(Future<Void> future, IOException expected)
             throws InterruptedException {
         Throwable cause = future.await().cause();
         assertTrue(cause instanceof ClosedChannelException);
@@ -156,9 +199,7 @@ public class AbstractChannelTest {
     }
 
     private static void registerChannel(Channel channel) throws Exception {
-        DefaultChannelPromise future = new DefaultChannelPromise(channel);
-        channel.register(future);
-        future.sync(); // Cause any exceptions to be thrown
+        channel.register().sync(); // Cause any exceptions to be thrown
     }
 
     private static class TestChannel extends AbstractChannel {
@@ -194,7 +235,7 @@ public class AbstractChannelTest {
         protected AbstractUnsafe newUnsafe() {
             return new AbstractUnsafe() {
                 @Override
-                public void connect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
+                public void connect(SocketAddress remoteAddress, SocketAddress localAddress, Promise<Void> promise) {
                     promise.setFailure(new UnsupportedOperationException());
                 }
             };

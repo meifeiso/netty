@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -17,7 +17,6 @@ package io.netty.example.redis;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
@@ -29,7 +28,7 @@ import io.netty.handler.codec.redis.RedisArrayAggregator;
 import io.netty.handler.codec.redis.RedisBulkStringAggregator;
 import io.netty.handler.codec.redis.RedisDecoder;
 import io.netty.handler.codec.redis.RedisEncoder;
-import io.netty.util.concurrent.GenericFutureListener;
+import io.netty.util.concurrent.Future;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -60,11 +59,11 @@ public class RedisClient {
              });
 
             // Start the connection attempt.
-            Channel ch = b.connect(HOST, PORT).sync().channel();
+            Channel ch = b.connect(HOST, PORT).get();
 
             // Read commands from the stdin.
             System.out.println("Enter Redis commands (quit to end)");
-            ChannelFuture lastWriteFuture = null;
+            Future<Void> lastWriteFuture = null;
             BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
             for (;;) {
                 final String input = in.readLine();
@@ -72,13 +71,14 @@ public class RedisClient {
                 if (line == null || "quit".equalsIgnoreCase(line)) { // EOF or "quit"
                     ch.close().sync();
                     break;
-                } else if (line.isEmpty()) { // skip `enter` or `enter` with spaces.
+                }
+                if (line.isEmpty()) { // skip `enter` or `enter` with spaces.
                     continue;
                 }
                 // Sends the received line to the server.
                 lastWriteFuture = ch.writeAndFlush(line);
-                lastWriteFuture.addListener((GenericFutureListener<ChannelFuture>) future -> {
-                    if (!future.isSuccess()) {
+                lastWriteFuture.addListener(future -> {
+                    if (future.isFailed()) {
                         System.err.print("write failed: ");
                         future.cause().printStackTrace(System.err);
                     }

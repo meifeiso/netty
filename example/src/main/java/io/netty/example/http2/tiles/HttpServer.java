@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,7 +18,6 @@ package io.netty.example.http2.tiles;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -29,9 +28,10 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.util.concurrent.Future;
 
 /**
- * Demonstrates a http server using Netty to display a bunch of images, simulate
+ * Demonstrates an http server using Netty to display a bunch of images, simulate
  * latency and compare it against the http2 implementation.
  */
 public final class HttpServer {
@@ -45,7 +45,7 @@ public final class HttpServer {
         group = eventLoopGroup;
     }
 
-    public ChannelFuture start() throws Exception {
+    public Future<Void> start() throws Exception {
         ServerBootstrap b = new ServerBootstrap();
         b.option(ChannelOption.SO_BACKLOG, 1024);
 
@@ -60,7 +60,7 @@ public final class HttpServer {
             }
         });
 
-        Channel ch = b.bind(PORT).sync().channel();
+        Channel ch = b.bind(PORT).get();
         return ch.closeFuture();
     }
 }

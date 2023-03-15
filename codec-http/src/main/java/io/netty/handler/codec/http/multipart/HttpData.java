@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -50,9 +50,8 @@ public interface HttpData extends InterfaceHttpData, ByteBufHolder {
     /**
      * Set the content from the ChannelBuffer (erase any previous data)
      *
-     * @param buffer
-     *            must be not null
-     * @throws IOException
+     * @param buffer Must be not null.
+     * @throws IOException If an IO error occurs when setting the content of this HttpData.
      */
     void setContent(ByteBuf buffer) throws IOException;
 
@@ -63,25 +62,23 @@ public interface HttpData extends InterfaceHttpData, ByteBufHolder {
      *            must be not null except if last is set to False
      * @param last
      *            True of the buffer is the last one
-     * @throws IOException
+     * @throws IOException If an IO error occurs while adding content to this HttpData.
      */
     void addContent(ByteBuf buffer, boolean last) throws IOException;
 
     /**
      * Set the content from the file (erase any previous data)
      *
-     * @param file
-     *            must be not null
-     * @throws IOException
+     * @param file Must be not null.
+     * @throws IOException If an IO error occurs when setting the content of this HttpData.
      */
     void setContent(File file) throws IOException;
 
     /**
      * Set the content from the inputStream (erase any previous data)
      *
-     * @param inputStream
-     *            must be not null
-     * @throws IOException
+     * @param inputStream Must be not null.
+     * @throws IOException If an IO error occurs when setting the content of this HttpData.
      */
     void setContent(InputStream inputStream) throws IOException;
 
@@ -121,18 +118,20 @@ public interface HttpData extends InterfaceHttpData, ByteBufHolder {
     void delete();
 
     /**
-     * Returns the contents of the file item as an array of bytes.
+     * Returns the contents of the file item as an array of bytes.<br>
+     * Note: this method will allocate a lot of memory, if the data is currently stored on the file system.
      *
      * @return the contents of the file item as an array of bytes.
-     * @throws IOException
+     * @throws IOException If an IO error occurs while reading the data contents of this HttpData.
      */
     byte[] get() throws IOException;
 
     /**
-     * Returns the content of the file item as a ByteBuf
+     * Returns the content of the file item as a ByteBuf.<br>
+     * Note: this method will allocate a lot of memory, if the data is currently stored on the file system.
      *
      * @return the content of the file item as a ByteBuf
-     * @throws IOException
+     * @throws IOException If an IO error occurs while reading the data contents of this HttpData.
      */
     ByteBuf getByteBuf() throws IOException;
 
@@ -153,7 +152,7 @@ public interface HttpData extends InterfaceHttpData, ByteBufHolder {
      *
      * @return the contents of the file item as a String, using the default
      *         character encoding.
-     * @throws IOException
+     * @throws IOException If an IO error occurs while reading the data contents of this HttpData.
      */
     String getString() throws IOException;
 
@@ -165,7 +164,7 @@ public interface HttpData extends InterfaceHttpData, ByteBufHolder {
      *            the charset to use
      * @return the contents of the file item as a String, using the specified
      *         charset.
-     * @throws IOException
+     * @throws IOException If an IO error occurs while reading the data contents of this HttpData.
      */
     String getString(Charset encoding) throws IOException;
 
@@ -190,10 +189,9 @@ public interface HttpData extends InterfaceHttpData, ByteBufHolder {
      * the new file will be out of the cleaner of the factory that creates the
      * original InterfaceHttpData object.
      *
-     * @param dest
-     *            destination file - must be not null
-     * @return True if the write is successful
-     * @throws IOException
+     * @param dest Destination file - must be not null.
+     * @return {@code true} if the write is successful.
+     * @throws IOException If an IO error occurs while renaming the underlying file of this HttpData.
      */
     boolean renameTo(File dest) throws IOException;
 

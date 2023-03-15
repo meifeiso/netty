@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,18 +19,18 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelOption;
 import io.netty.util.internal.SocketUtils;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ServerSocketSuspendTest extends AbstractServerSocketTest {
 
@@ -38,9 +38,9 @@ public class ServerSocketSuspendTest extends AbstractServerSocketTest {
     private static final long TIMEOUT = 3000000000L;
 
     @Test
-    @Ignore("Need to investigate why it fails on osx")
-    public void testSuspendAndResumeAccept() throws Throwable {
-        run();
+    @Disabled("Need to investigate why it fails on osx")
+    public void testSuspendAndResumeAccept(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testSuspendAndResumeAccept);
     }
 
     public void testSuspendAndResumeAccept(ServerBootstrap sb) throws Throwable {
@@ -50,7 +50,7 @@ public class ServerSocketSuspendTest extends AbstractServerSocketTest {
         sb.option(ChannelOption.AUTO_READ, false);
         sb.childHandler(counter);
 
-        Channel sc = sb.bind().sync().channel();
+        Channel sc = sb.bind().get();
 
         List<Socket> sockets = new ArrayList<>();
 
@@ -94,7 +94,7 @@ public class ServerSocketSuspendTest extends AbstractServerSocketTest {
     }
 
     @ChannelHandler.Sharable
-    private static final class AcceptedChannelCounter implements ChannelInboundHandler {
+    private static final class AcceptedChannelCounter implements ChannelHandler {
 
         final CountDownLatch latch;
 

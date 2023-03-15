@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,15 +19,23 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.CharsetUtil;
-import org.junit.Test;
+import io.netty.util.concurrent.Promise;
+import org.junit.jupiter.api.Test;
 
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.concurrent.Executors;
 
-import static io.netty.buffer.Unpooled.*;
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static io.netty.buffer.Unpooled.buffer;
+import static io.netty.buffer.Unpooled.compositeBuffer;
+import static io.netty.buffer.Unpooled.copiedBuffer;
+import static io.netty.buffer.Unpooled.directBuffer;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ChannelOutboundBufferTest {
 
@@ -54,12 +62,12 @@ public class ChannelOutboundBufferTest {
 
         ByteBuf buf = copiedBuffer("buf1", CharsetUtil.US_ASCII);
         ByteBuffer nioBuf = buf.internalNioBuffer(buf.readerIndex(), buf.readableBytes());
-        buffer.addMessage(buf, buf.readableBytes(), channel.voidPromise());
-        assertEquals("Should still be 0 as not flushed yet", 0, buffer.nioBufferCount());
+        buffer.addMessage(buf, buf.readableBytes(), channel.newPromise());
+        assertEquals(0, buffer.nioBufferCount(), "Should still be 0 as not flushed yet");
         buffer.addFlush();
         ByteBuffer[] buffers = buffer.nioBuffers();
         assertNotNull(buffers);
-        assertEquals("Should still be 0 as not flushed yet", 1, buffer.nioBufferCount());
+        assertEquals(1, buffer.nioBufferCount(), "Should still be 0 as not flushed yet");
         for (int i = 0;  i < buffer.nioBufferCount(); i++) {
             if (i == 0) {
                 assertEquals(buffers[i], nioBuf);
@@ -78,9 +86,9 @@ public class ChannelOutboundBufferTest {
 
         ByteBuf buf = directBuffer().writeBytes("buf1".getBytes(CharsetUtil.US_ASCII));
         for (int i = 0; i < 64; i++) {
-            buffer.addMessage(buf.copy(), buf.readableBytes(), channel.voidPromise());
+            buffer.addMessage(buf.copy(), buf.readableBytes(), channel.newPromise());
         }
-        assertEquals("Should still be 0 as not flushed yet", 0, buffer.nioBufferCount());
+        assertEquals(0, buffer.nioBufferCount(), "Should still be 0 as not flushed yet");
         buffer.addFlush();
         ByteBuffer[] buffers = buffer.nioBuffers();
         assertEquals(64, buffer.nioBufferCount());
@@ -102,9 +110,9 @@ public class ChannelOutboundBufferTest {
         for (int i = 0; i < 65; i++) {
             comp.addComponent(true, buf.copy());
         }
-        buffer.addMessage(comp, comp.readableBytes(), channel.voidPromise());
+        buffer.addMessage(comp, comp.readableBytes(), channel.newPromise());
 
-        assertEquals("Should still be 0 as not flushed yet", 0, buffer.nioBufferCount());
+        assertEquals(0, buffer.nioBufferCount(), "Should still be 0 as not flushed yet");
         buffer.addFlush();
         ByteBuffer[] buffers = buffer.nioBuffers();
         assertEquals(65, buffer.nioBufferCount());
@@ -114,6 +122,31 @@ public class ChannelOutboundBufferTest {
             } else {
                 assertNull(buffers[i]);
             }
+        }
+        release(buffer);
+        buf.release();
+    }
+
+    @Test
+    public void testNioBuffersMaxCount() {
+        TestChannel channel = new TestChannel();
+
+        ChannelOutboundBuffer buffer = new ChannelOutboundBuffer(channel);
+
+        CompositeByteBuf comp = compositeBuffer(256);
+        ByteBuf buf = directBuffer().writeBytes("buf1".getBytes(CharsetUtil.US_ASCII));
+        for (int i = 0; i < 65; i++) {
+            comp.addComponent(true, buf.copy());
+        }
+        assertEquals(65, comp.nioBufferCount());
+        buffer.addMessage(comp, comp.readableBytes(), channel.newPromise());
+        assertEquals(0, buffer.nioBufferCount(), "Should still be 0 as not flushed yet");
+        buffer.addFlush();
+        final int maxCount = 10;    // less than comp.nioBufferCount()
+        ByteBuffer[] buffers = buffer.nioBuffers(maxCount, Integer.MAX_VALUE);
+        assertTrue(buffer.nioBufferCount() <= maxCount, "Should not be greater than maxCount");
+        for (int i = 0;  i < buffer.nioBufferCount(); i++) {
+            assertEquals(buffers[i], buf.internalNioBuffer(buf.readerIndex(), buf.readableBytes()));
         }
         release(buffer);
         buf.release();
@@ -228,7 +261,7 @@ public class ChannelOutboundBufferTest {
 
         final class TestUnsafe extends AbstractUnsafe {
             @Override
-            public void connect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
+            public void connect(SocketAddress remoteAddress, SocketAddress localAddress, Promise<Void> promise) {
                 throw new UnsupportedOperationException();
             }
         }
@@ -359,25 +392,27 @@ public class ChannelOutboundBufferTest {
 
         ChannelOutboundBuffer cob = ch.unsafe().outboundBuffer();
 
-        // Trigger channelWritabilityChanged() by writing a lot.
-        ch.write(buffer().writeZero(257));
-        assertThat(buf.toString(), is("false "));
+        ch.executor().execute(() -> {
+            // Trigger channelWritabilityChanged() by writing a lot.
+            ch.write(buffer().writeZero(257));
+            assertThat(buf.toString(), is("false "));
 
-        // Ensure that setting a user-defined writability flag to false does not trigger channelWritabilityChanged()
-        cob.setUserDefinedWritability(1, false);
-        ch.runPendingTasks();
-        assertThat(buf.toString(), is("false "));
+            // Ensure that setting a user-defined writability flag to false does not trigger channelWritabilityChanged()
+            cob.setUserDefinedWritability(1, false);
+            ch.runPendingTasks();
+            assertThat(buf.toString(), is("false "));
 
-        // Ensure reducing the totalPendingWriteBytes down to zero does not trigger channelWritabilityChanged()
-        // because of the user-defined writability flag.
-        ch.flush();
-        assertThat(cob.totalPendingWriteBytes(), is(0L));
-        assertThat(buf.toString(), is("false "));
+            // Ensure reducing the totalPendingWriteBytes down to zero does not trigger channelWritabilityChanged()
+            // because of the user-defined writability flag.
+            ch.flush();
+            assertThat(cob.totalPendingWriteBytes(), is(0L));
+            assertThat(buf.toString(), is("false "));
 
-        // Ensure that setting the user-defined writability flag to true triggers channelWritabilityChanged()
-        cob.setUserDefinedWritability(1, true);
-        ch.runPendingTasks();
-        assertThat(buf.toString(), is("false true "));
+            // Ensure that setting the user-defined writability flag to true triggers channelWritabilityChanged()
+            cob.setUserDefinedWritability(1, true);
+            ch.runPendingTasks();
+            assertThat(buf.toString(), is("false true "));
+        });
 
         safeClose(ch);
     }

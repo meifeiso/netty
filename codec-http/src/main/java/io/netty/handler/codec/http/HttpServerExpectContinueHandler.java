@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,9 +16,9 @@
 package io.netty.handler.codec.http;
 
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
@@ -44,7 +44,7 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
  *  </pre>
  * </blockquote>
  */
-public class HttpServerExpectContinueHandler implements ChannelInboundHandler {
+public class HttpServerExpectContinueHandler implements ChannelHandler {
 
     private static final FullHttpResponse EXPECTATION_FAILED = new DefaultFullHttpResponse(
             HTTP_1_1, HttpResponseStatus.EXPECTATION_FAILED, Unpooled.EMPTY_BUFFER);
@@ -84,11 +84,11 @@ public class HttpServerExpectContinueHandler implements ChannelInboundHandler {
                     // the expectation failed so we refuse the request.
                     HttpResponse rejection = rejectResponse(req);
                     ReferenceCountUtil.release(msg);
-                    ctx.writeAndFlush(rejection).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+                    ctx.writeAndFlush(rejection).addListener(ctx.channel(), ChannelFutureListeners.CLOSE_ON_FAILURE);
                     return;
                 }
 
-                ctx.writeAndFlush(accept).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+                ctx.writeAndFlush(accept).addListener(ctx.channel(), ChannelFutureListeners.CLOSE_ON_FAILURE);
                 req.headers().remove(HttpHeaderNames.EXPECT);
             }
         }

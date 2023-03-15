@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -89,7 +89,7 @@ public interface Http2Connection {
 
         /**
          * Called when a {@code GOAWAY} was received from the remote endpoint. This event handler duplicates {@link
-         * Http2FrameListener#onGoAwayRead(io.netty.channel.ChannelHandlerContext, int, long, io.netty.buffer.ByteBuf)}
+         * Http2FrameListener#onGoAwayRead(io.netty.channel.ChannelHandlerContext, int, long, ByteBuf)}
          * but is added here in order to simplify application logic for handling {@code GOAWAY} in a uniform way. An
          * application should generally not handle both events, but if it does this method is called second, after
          * notifying the {@link Http2FrameListener}.
@@ -253,10 +253,10 @@ public interface Http2Connection {
      * all streams that exists (active or otherwise) will be closed and removed.
      * <p>Note if iterating active streams via {@link #forEachActiveStream(Http2StreamVisitor)} and an exception is
      * thrown it is necessary to call this method again to ensure the close completes.
+     *
      * @param promise Will be completed when all streams have been removed, and listeners have been notified.
-     * @return A future that will be completed when all streams have been removed, and listeners have been notified.
      */
-    Future<Void> close(Promise<Void> promise);
+    void close(Promise<Void> promise);
 
     /**
      * Creates a new key that is unique within this {@link Http2Connection}.

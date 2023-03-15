@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,23 +15,24 @@
  */
 package io.netty.handler.codec;
 
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import io.netty.util.concurrent.Future;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MessageToMessageEncoderTest {
 
     /**
      * Test-case for https://github.com/netty/netty/issues/1656
      */
-    @Test(expected = EncoderException.class)
+    @Test
     public void testException() {
         EmbeddedChannel channel = new EmbeddedChannel(new MessageToMessageEncoder<Object>() {
             @Override
@@ -39,7 +40,7 @@ public class MessageToMessageEncoderTest {
                 throw new Exception();
             }
         });
-        channel.writeOutbound(new Object());
+        assertThrows(EncoderException.class, () -> channel.writeOutbound(new Object()));
     }
 
     @Test
@@ -57,19 +58,19 @@ public class MessageToMessageEncoderTest {
         ChannelHandler writeThrower = new ChannelHandler() {
             private boolean firstWritten;
             @Override
-            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+            public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
                 if (firstWritten) {
-                    ctx.write(msg, promise);
+                    return ctx.write(msg);
                 } else {
                     firstWritten = true;
-                    promise.setFailure(firstWriteException);
+                    return ctx.newFailedFuture(firstWriteException);
                 }
             }
         };
 
         EmbeddedChannel channel = new EmbeddedChannel(writeThrower, encoder);
         Object msg = new Object();
-        ChannelFuture write = channel.writeAndFlush(msg);
+        Future<Void> write = channel.writeAndFlush(msg);
         assertSame(firstWriteException, write.cause());
         assertSame(msg, channel.readOutbound());
         assertFalse(channel.finish());

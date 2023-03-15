@@ -5,7 +5,7 @@
  * 2.0 (the "License"); you may not use this file except in compliance with the
  * License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,11 +15,9 @@
  */
 package io.netty.handler.codec.http.cors;
 
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
@@ -27,6 +25,7 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpUtil;
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -41,7 +40,7 @@ import static io.netty.util.internal.ObjectUtil.checkNonEmpty;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Handles <a href="http://www.w3.org/TR/cors/">Cross Origin Resource Sharing</a> (CORS) requests.
+ * Handles <a href="https://www.w3.org/TR/cors/">Cross Origin Resource Sharing</a> (CORS) requests.
  * <p>
  * This handler can be configured using one or more {@link CorsConfig}, please
  * refer to this class for details about the configuration options available.
@@ -55,7 +54,7 @@ public class CorsHandler implements ChannelHandler {
 
     private HttpRequest request;
     private final List<CorsConfig> configList;
-    private boolean isShortCircuit;
+    private final boolean isShortCircuit;
 
     /**
      * Creates a new instance with a single {@link CorsConfig}.
@@ -69,7 +68,7 @@ public class CorsHandler implements ChannelHandler {
      * config matches a certain origin, the first in the List will be used.
      *
      * @param configList     List of {@link CorsConfig}
-     * @param isShortCircuit Same as {@link CorsConfig#shortCircuit} but applicable to all supplied configs.
+     * @param isShortCircuit Same as {@link CorsConfig#isShortCurcuit()} but applicable to all supplied configs.
      */
     public CorsHandler(final List<CorsConfig> configList, boolean isShortCircuit) {
         checkNonEmpty(configList, "configList");
@@ -215,8 +214,7 @@ public class CorsHandler implements ChannelHandler {
     }
 
     @Override
-    public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise)
-            throws Exception {
+    public Future<Void> write(final ChannelHandlerContext ctx, final Object msg) {
         if (config != null && config.isCorsSupportEnabled() && msg instanceof HttpResponse) {
             final HttpResponse response = (HttpResponse) msg;
             if (setOrigin(response)) {
@@ -224,7 +222,7 @@ public class CorsHandler implements ChannelHandler {
                 setExposeHeaders(response);
             }
         }
-        ctx.write(msg, promise);
+        return ctx.write(msg);
     }
 
     private static void forbidden(final ChannelHandlerContext ctx, final HttpRequest request) {
@@ -244,9 +242,9 @@ public class CorsHandler implements ChannelHandler {
 
         HttpUtil.setKeepAlive(response, keepAlive);
 
-        final ChannelFuture future = ctx.writeAndFlush(response);
+        Future<Void> future = ctx.writeAndFlush(response);
         if (!keepAlive) {
-            future.addListener(ChannelFutureListener.CLOSE);
+            future.addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
         }
     }
 }

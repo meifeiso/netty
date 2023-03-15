@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,13 +21,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.AbstractChannel;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.IoHandler;
@@ -36,15 +33,18 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.SingleThreadEventLoop;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
 import io.netty.util.concurrent.RejectedExecutionHandler;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.net.ConnectException;
+import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
@@ -55,12 +55,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class LocalChannelTest {
 
@@ -72,14 +73,14 @@ public class LocalChannelTest {
     private static EventLoopGroup group2;
     private static EventLoopGroup sharedGroup;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         group1 = new MultithreadEventLoopGroup(2, LocalHandler.newFactory());
         group2 = new MultithreadEventLoopGroup(2, LocalHandler.newFactory());
         sharedGroup = new MultithreadEventLoopGroup(1, LocalHandler.newFactory());
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws InterruptedException {
         Future<?> group1Future = group1.shutdownGracefully(0, 0, SECONDS);
         Future<?> group2Future = group2.shutdownGracefully(0, 0, SECONDS);
@@ -112,13 +113,13 @@ public class LocalChannelTest {
             Channel cc = null;
             try {
                 // Start server
-                sc = sb.bind(TEST_ADDRESS).sync().channel();
+                sc = sb.bind(TEST_ADDRESS).get();
 
                 final CountDownLatch latch = new CountDownLatch(1);
                 // Connect to the server
-                cc = cb.connect(sc.localAddress()).sync().channel();
+                cc = cb.connect(sc.localAddress()).get();
                 final Channel ccCpy = cc;
-                cc.eventLoop().execute(() -> {
+                cc.executor().execute(() -> {
                     // Send a message event up the pipeline.
                     ccCpy.pipeline().fireChannelRead("Hello, World");
                     latch.countDown();
@@ -130,9 +131,9 @@ public class LocalChannelTest {
                 closeChannel(sc);
                 sc.closeFuture().sync();
 
-                assertNull(String.format(
+                assertNull(LocalChannelRegistry.get(TEST_ADDRESS), String.format(
                         "Expected null, got channel '%s' for local address '%s'",
-                        LocalChannelRegistry.get(TEST_ADDRESS), TEST_ADDRESS), LocalChannelRegistry.get(TEST_ADDRESS));
+                        LocalChannelRegistry.get(TEST_ADDRESS), TEST_ADDRESS));
             } finally {
                 closeChannel(cc);
                 closeChannel(sc);
@@ -162,10 +163,10 @@ public class LocalChannelTest {
         Channel cc = null;
         try {
             // Start server
-            sc = sb.bind(TEST_ADDRESS).sync().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
 
             // Connect to the server
-            cc = cb.connect(sc.localAddress()).sync().channel();
+            cc = cb.connect(sc.localAddress()).get();
 
             // Close the channel and write something.
             cc.close().sync();
@@ -198,7 +199,7 @@ public class LocalChannelTest {
                 .channel(LocalServerChannel.class)
                 .childHandler(new SimpleChannelInboundHandler<Object>() {
                     @Override
-                    protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+                    protected void messageReceived(ChannelHandlerContext ctx, Object msg) throws Exception {
                         ctx.close();
                         latch.countDown();
                     }
@@ -206,18 +207,18 @@ public class LocalChannelTest {
         Channel sc = null;
         Channel cc = null;
         try {
-            sc = sb.bind(TEST_ADDRESS).sync().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
 
             Bootstrap b = new Bootstrap()
                     .group(group2)
                     .channel(LocalChannel.class)
                     .handler(new SimpleChannelInboundHandler<Object>() {
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+                        protected void messageReceived(ChannelHandlerContext ctx, Object msg) throws Exception {
                             // discard
                         }
                     });
-            cc = b.connect(sc.localAddress()).sync().channel();
+            cc = b.connect(sc.localAddress()).get();
             cc.writeAndFlush(new Object());
             assertTrue(latch.await(5, SECONDS));
         } finally {
@@ -246,7 +247,7 @@ public class LocalChannelTest {
                                 /* Only slow down the anonymous class in LocalChannel#doRegister() */
                                 if (task.getClass().getEnclosingClass() == LocalChannel.class) {
                                     try {
-                                        closeLatch.await(1, TimeUnit.SECONDS);
+                                        closeLatch.await(1, SECONDS);
                                     } catch (InterruptedException e) {
                                         throw new Error(e);
                                     }
@@ -272,8 +273,7 @@ public class LocalChannelTest {
                             closeLatch.countDown();
                         }
                     }).
-                    bind(TEST_ADDRESS).
-                    sync().channel();
+                    bind(TEST_ADDRESS).get();
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(clientGroup).
                     channel(LocalChannel.class).
@@ -283,9 +283,9 @@ public class LocalChannelTest {
                             /* Do nothing */
                         }
                     });
-            ChannelFuture future = bootstrap.connect(sc.localAddress());
-            assertTrue("Connection should finish, not time out", future.await(2000));
-            cc = future.channel();
+            Future<Channel> future = bootstrap.connect(sc.localAddress());
+            assertTrue(future.await(2000), "Connection should finish, not time out");
+            cc = future.await().isSuccess() ? future.get() : null;
         } finally {
             closeChannel(cc);
             closeChannel(sc);
@@ -294,7 +294,7 @@ public class LocalChannelTest {
     }
 
     @Test
-    public void testReRegister() {
+    public void testReRegister() throws Exception {
         Bootstrap cb = new Bootstrap();
         ServerBootstrap sb = new ServerBootstrap();
 
@@ -315,10 +315,10 @@ public class LocalChannelTest {
         Channel cc = null;
         try {
             // Start server
-            sc = sb.bind(TEST_ADDRESS).syncUninterruptibly().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
 
             // Connect to the server
-            cc = cb.connect(sc.localAddress()).syncUninterruptibly().channel();
+            cc = cb.connect(sc.localAddress()).get();
 
             cc.deregister().syncUninterruptibly();
         } finally {
@@ -328,7 +328,7 @@ public class LocalChannelTest {
     }
 
     @Test
-    public void testCloseInWritePromiseCompletePreservesOrder() throws InterruptedException {
+    public void testCloseInWritePromiseCompletePreservesOrder() throws Exception {
         Bootstrap cb = new Bootstrap();
         ServerBootstrap sb = new ServerBootstrap();
         final CountDownLatch messageLatch = new CountDownLatch(2);
@@ -362,17 +362,16 @@ public class LocalChannelTest {
             Channel cc = null;
             try {
                 // Start server
-                sc = sb.bind(TEST_ADDRESS).syncUninterruptibly().channel();
+                sc = sb.bind(TEST_ADDRESS).get();
 
                 // Connect to the server
-                cc = cb.connect(sc.localAddress()).syncUninterruptibly().channel();
+                cc = cb.connect(sc.localAddress()).get();
 
                 final Channel ccCpy = cc;
                 // Make sure a write operation is executed in the eventloop
                 cc.pipeline().lastContext().executor().execute(() -> {
-                    ChannelPromise promise = ccCpy.newPromise();
-                    promise.addListener((ChannelFutureListener) future -> ccCpy.pipeline().lastContext().close());
-                    ccCpy.writeAndFlush(data.retainedDuplicate(), promise);
+                    ccCpy.writeAndFlush(data.retainedDuplicate())
+                            .addListener(future -> ccCpy.pipeline().lastContext().close());
                 });
 
                 assertTrue(messageLatch.await(5, SECONDS));
@@ -387,7 +386,7 @@ public class LocalChannelTest {
     }
 
     @Test
-    public void testCloseAfterWriteInSameEventLoopPreservesOrder() throws InterruptedException {
+    public void testCloseAfterWriteInSameEventLoopPreservesOrder() throws Exception {
         Bootstrap cb = new Bootstrap();
         ServerBootstrap sb = new ServerBootstrap();
         final CountDownLatch messageLatch = new CountDownLatch(3);
@@ -438,10 +437,10 @@ public class LocalChannelTest {
             Channel cc = null;
             try {
                 // Start server
-                sc = sb.bind(TEST_ADDRESS).syncUninterruptibly().channel();
+                sc = sb.bind(TEST_ADDRESS).get();
 
                 // Connect to the server
-                cc = cb.connect(sc.localAddress()).syncUninterruptibly().channel();
+                cc = cb.connect(sc.localAddress()).get();
                 assertTrue(messageLatch.await(5, SECONDS));
                 assertFalse(cc.isOpen());
             } finally {
@@ -454,7 +453,7 @@ public class LocalChannelTest {
     }
 
     @Test
-    public void testWriteInWritePromiseCompletePreservesOrder() throws InterruptedException {
+    public void testWriteInWritePromiseCompletePreservesOrder() throws Exception {
         Bootstrap cb = new Bootstrap();
         ServerBootstrap sb = new ServerBootstrap();
         final CountDownLatch messageLatch = new CountDownLatch(2);
@@ -472,7 +471,7 @@ public class LocalChannelTest {
                 @Override
                 public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
                     final long count = messageLatch.getCount();
-                    if ((data.equals(msg) && count == 2) || (data2.equals(msg) && count == 1)) {
+                    if (data.equals(msg) && count == 2 || data2.equals(msg) && count == 1) {
                         ReferenceCountUtil.safeRelease(msg);
                         messageLatch.countDown();
                     } else {
@@ -485,18 +484,16 @@ public class LocalChannelTest {
             Channel cc = null;
             try {
                 // Start server
-                sc = sb.bind(TEST_ADDRESS).syncUninterruptibly().channel();
+                sc = sb.bind(TEST_ADDRESS).get();
 
                 // Connect to the server
-                cc = cb.connect(sc.localAddress()).syncUninterruptibly().channel();
+                cc = cb.connect(sc.localAddress()).get();
 
                 final Channel ccCpy = cc;
                 // Make sure a write operation is executed in the eventloop
                 cc.pipeline().lastContext().executor().execute(() -> {
-                    ChannelPromise promise = ccCpy.newPromise();
-                    promise.addListener((ChannelFutureListener) future ->
-                            ccCpy.writeAndFlush(data2.retainedDuplicate(), ccCpy.newPromise()));
-                    ccCpy.writeAndFlush(data.retainedDuplicate(), promise);
+                    ccCpy.writeAndFlush(data.retainedDuplicate()).addListener(future ->
+                            ccCpy.writeAndFlush(data2.retainedDuplicate()));
                 });
 
                 assertTrue(messageLatch.await(5, SECONDS));
@@ -511,7 +508,7 @@ public class LocalChannelTest {
     }
 
     @Test
-    public void testPeerWriteInWritePromiseCompleteDifferentEventLoopPreservesOrder() throws InterruptedException {
+    public void testPeerWriteInWritePromiseCompleteDifferentEventLoopPreservesOrder() throws Exception {
         Bootstrap cb = new Bootstrap();
         ServerBootstrap sb = new ServerBootstrap();
         final CountDownLatch messageLatch = new CountDownLatch(2);
@@ -559,21 +556,19 @@ public class LocalChannelTest {
         Channel cc = null;
         try {
             // Start server
-            sc = sb.bind(TEST_ADDRESS).syncUninterruptibly().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
 
             // Connect to the server
-            cc = cb.connect(sc.localAddress()).syncUninterruptibly().channel();
+            cc = cb.connect(sc.localAddress()).get();
             assertTrue(serverChannelLatch.await(5, SECONDS));
 
             final Channel ccCpy = cc;
             // Make sure a write operation is executed in the eventloop
             cc.pipeline().lastContext().executor().execute(() -> {
-                ChannelPromise promise = ccCpy.newPromise();
-                promise.addListener((ChannelFutureListener) future -> {
+                ccCpy.writeAndFlush(data.retainedDuplicate()).addListener(future -> {
                     Channel serverChannelCpy = serverChannelRef.get();
-                    serverChannelCpy.writeAndFlush(data2.retainedDuplicate(), serverChannelCpy.newPromise());
+                    serverChannelCpy.writeAndFlush(data2.retainedDuplicate());
                 });
-                ccCpy.writeAndFlush(data.retainedDuplicate(), promise);
             });
 
             assertTrue(messageLatch.await(5, SECONDS));
@@ -586,7 +581,7 @@ public class LocalChannelTest {
     }
 
     @Test
-    public void testPeerWriteInWritePromiseCompleteSameEventLoopPreservesOrder() throws InterruptedException {
+    public void testPeerWriteInWritePromiseCompleteSameEventLoopPreservesOrder() throws Exception {
         Bootstrap cb = new Bootstrap();
         ServerBootstrap sb = new ServerBootstrap();
         final CountDownLatch messageLatch = new CountDownLatch(2);
@@ -635,22 +630,20 @@ public class LocalChannelTest {
             Channel cc = null;
             try {
                 // Start server
-                sc = sb.bind(TEST_ADDRESS).syncUninterruptibly().channel();
+                sc = sb.bind(TEST_ADDRESS).get();
 
                 // Connect to the server
-                cc = cb.connect(sc.localAddress()).syncUninterruptibly().channel();
+                cc = cb.connect(sc.localAddress()).get();
                 assertTrue(serverChannelLatch.await(5, SECONDS));
 
                 final Channel ccCpy = cc;
                 // Make sure a write operation is executed in the eventloop
                 cc.pipeline().lastContext().executor().execute(() -> {
-                    ChannelPromise promise = ccCpy.newPromise();
-                    promise.addListener((ChannelFutureListener) future -> {
+                    ccCpy.writeAndFlush(data.retainedDuplicate()).addListener(future -> {
                         Channel serverChannelCpy = serverChannelRef.get();
                         serverChannelCpy.writeAndFlush(
-                            data2.retainedDuplicate(), serverChannelCpy.newPromise());
+                                data2.retainedDuplicate());
                     });
-                    ccCpy.writeAndFlush(data.retainedDuplicate(), promise);
                 });
 
                 assertTrue(messageLatch.await(5, SECONDS));
@@ -665,7 +658,7 @@ public class LocalChannelTest {
     }
 
     @Test
-    public void testWriteWhilePeerIsClosedReleaseObjectAndFailPromise() throws InterruptedException {
+    public void testWriteWhilePeerIsClosedReleaseObjectAndFailPromise() throws Exception {
         Bootstrap cb = new Bootstrap();
         ServerBootstrap sb = new ServerBootstrap();
         final CountDownLatch serverMessageLatch = new CountDownLatch(1);
@@ -707,10 +700,10 @@ public class LocalChannelTest {
             Channel cc = null;
             try {
                 // Start server
-                sc = sb.bind(TEST_ADDRESS).syncUninterruptibly().channel();
+                sc = sb.bind(TEST_ADDRESS).get();
 
                 // Connect to the server
-                cc = cb.connect(sc.localAddress()).syncUninterruptibly().channel();
+                cc = cb.connect(sc.localAddress()).get();
                 assertTrue(serverChannelLatch.await(5, SECONDS));
 
                 final Channel ccCpy = cc;
@@ -720,9 +713,9 @@ public class LocalChannelTest {
 
                 // Make sure a write operation is executed in the eventloop
                 cc.pipeline().lastContext().executor().execute(() ->
-                        ccCpy.writeAndFlush(data.retainedDuplicate(), ccCpy.newPromise())
-                .addListener((ChannelFutureListener) future -> {
-                    serverChannelCpy.eventLoop().execute(() -> {
+                        ccCpy.writeAndFlush(data.retainedDuplicate())
+                .addListener(future -> {
+                    serverChannelCpy.executor().execute(() -> {
                         // The point of this test is to write while the peer is closed, so we should
                         // ensure the peer is actually closed before we write.
                         int waitCount = 0;
@@ -736,9 +729,8 @@ public class LocalChannelTest {
                                 fail();
                             }
                         }
-                        serverChannelCpy.writeAndFlush(data2.retainedDuplicate(),
-                            serverChannelCpy.newPromise())
-                            .addListener((ChannelFutureListener) future1 -> {
+                        serverChannelCpy.writeAndFlush(data2.retainedDuplicate())
+                            .addListener(future1 -> {
                                 if (!future1.isSuccess() &&
                                     future1.cause() instanceof ClosedChannelException) {
                                     writeFailLatch.countDown();
@@ -764,7 +756,8 @@ public class LocalChannelTest {
         }
     }
 
-    @Test(timeout = 3000)
+    @Test
+    @Timeout(value = 3000, unit = TimeUnit.MILLISECONDS)
     public void testConnectFutureBeforeChannelActive() throws Exception {
         Bootstrap cb = new Bootstrap();
         ServerBootstrap sb = new ServerBootstrap();
@@ -786,18 +779,26 @@ public class LocalChannelTest {
         Channel cc = null;
         try {
             // Start server
-            sc = sb.bind(TEST_ADDRESS).sync().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
 
-            cc = cb.register().sync().channel();
+            cc = cb.register().get();
 
-            final ChannelPromise promise = cc.newPromise();
-            final Promise<Void> assertPromise = cc.eventLoop().newPromise();
+            final AtomicReference<Future<Void>> ref = new AtomicReference<>();
+            final Promise<Void> assertPromise = cc.executor().newPromise();
 
             cc.pipeline().addLast(new TestHandler() {
                 @Override
+                public Future<Void> connect(ChannelHandlerContext ctx,
+                                             SocketAddress remoteAddress, SocketAddress localAddress) {
+                    Future<Void> future = super.connect(ctx, remoteAddress, localAddress);
+                    ref.set(future);
+                    return future;
+                }
+
+                @Override
                 public void channelActive(ChannelHandlerContext ctx) throws Exception {
                     // Ensure the promise was done before the handler method is triggered.
-                    if (promise.isDone()) {
+                    if (ref.get().isDone()) {
                         assertPromise.setSuccess(null);
                     } else {
                         assertPromise.setFailure(new AssertionError("connect promise should be done"));
@@ -805,36 +806,37 @@ public class LocalChannelTest {
                 }
             });
             // Connect to the server
-            cc.connect(sc.localAddress(), promise).sync();
+            cc.connect(sc.localAddress()).sync();
+            Future<Void> f = ref.get().sync();
 
             assertPromise.syncUninterruptibly();
-            assertTrue(promise.isSuccess());
+            assertTrue(f.isSuccess());
         } finally {
             closeChannel(cc);
             closeChannel(sc);
         }
     }
 
-    @Test(expected = ConnectException.class)
+    @Test
     public void testConnectionRefused() throws Throwable {
         try {
             Bootstrap sb = new Bootstrap();
-            sb.group(group1)
+            assertTrue(assertThrows(CompletionException.class, () -> sb.group(group1)
                     .channel(LocalChannel.class)
                     .handler(new TestHandler())
-                    .connect(LocalAddress.ANY).syncUninterruptibly();
+                    .connect(LocalAddress.ANY).syncUninterruptibly()).getCause() instanceof ConnectException);
         } catch (CompletionException e) {
             throw e.getCause();
         }
     }
 
-    private static final class LatchChannelFutureListener extends CountDownLatch implements ChannelFutureListener {
+    private static final class LatchChannelFutureListener extends CountDownLatch implements FutureListener<Object> {
         private LatchChannelFutureListener(int count) {
             super(count);
         }
 
         @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
+        public void operationComplete(Future<?> future) throws Exception {
             countDown();
         }
     }
@@ -867,7 +869,7 @@ public class LocalChannelTest {
                     }
 
                     @Override
-                    public void channelRead0(ChannelHandlerContext ctx, ByteBuf buffer) throws Exception {
+                    public void messageReceived(ChannelHandlerContext ctx, ByteBuf buffer) throws Exception {
                         // Just drop the buffer
                     }
                 });
@@ -880,7 +882,7 @@ public class LocalChannelTest {
                         ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
 
                             @Override
-                            public void channelRead0(ChannelHandlerContext ctx, ByteBuf buffer) throws Exception {
+                            public void messageReceived(ChannelHandlerContext ctx, ByteBuf buffer) throws Exception {
                                 while (buffer.isReadable()) {
                                     // Fill the ChannelOutboundBuffer with multiple buffers
                                     ctx.write(buffer.readRetainedSlice(1));
@@ -899,10 +901,10 @@ public class LocalChannelTest {
         LocalChannel cc = null;
         try {
             // Start server
-            sc = sb.bind(TEST_ADDRESS).sync().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
 
             // Connect to the server
-            cc = (LocalChannel) cb.connect(sc.localAddress()).sync().channel();
+            cc = (LocalChannel) cb.connect(sc.localAddress()).get();
 
             // Close the channel
             closeChannel(cc);
@@ -915,19 +917,21 @@ public class LocalChannelTest {
     }
 
     private static void writeAndFlushReadOnSuccess(final ChannelHandlerContext ctx, Object msg) {
-        ctx.writeAndFlush(msg).addListener((ChannelFutureListener) future -> {
+        ctx.writeAndFlush(msg).addListener(future -> {
             if (future.isSuccess()) {
                 ctx.read();
             }
         });
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testAutoReadDisabledSharedGroup() throws Exception {
         testAutoReadDisabled(sharedGroup, sharedGroup);
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testAutoReadDisabledDifferentGroup() throws Exception {
         testAutoReadDisabled(group1, group2);
     }
@@ -975,8 +979,8 @@ public class LocalChannelTest {
         Channel cc = null;
         try {
             // Start server
-            sc = sb.bind(TEST_ADDRESS).sync().channel();
-            cc = cb.connect(TEST_ADDRESS).sync().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
+            cc = cb.connect(TEST_ADDRESS).get();
 
             latch.await();
         } finally {
@@ -985,22 +989,26 @@ public class LocalChannelTest {
         }
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testMaxMessagesPerReadRespectedWithAutoReadSharedGroup() throws Exception {
         testMaxMessagesPerReadRespected(sharedGroup, sharedGroup, true);
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testMaxMessagesPerReadRespectedWithoutAutoReadSharedGroup() throws Exception {
         testMaxMessagesPerReadRespected(sharedGroup, sharedGroup, false);
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testMaxMessagesPerReadRespectedWithAutoReadDifferentGroup() throws Exception {
         testMaxMessagesPerReadRespected(group1, group2, true);
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testMaxMessagesPerReadRespectedWithoutAutoReadDifferentGroup() throws Exception {
         testMaxMessagesPerReadRespected(group1, group2, false);
     }
@@ -1032,8 +1040,8 @@ public class LocalChannelTest {
         Channel cc = null;
         try {
             // Start server
-            sc = sb.bind(TEST_ADDRESS).sync().channel();
-            cc = cb.connect(TEST_ADDRESS).sync().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
+            cc = cb.connect(TEST_ADDRESS).get();
 
             countDownLatch.await();
         } finally {
@@ -1042,27 +1050,31 @@ public class LocalChannelTest {
         }
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testServerMaxMessagesPerReadRespectedWithAutoReadSharedGroup() throws Exception {
         testServerMaxMessagesPerReadRespected(sharedGroup, sharedGroup, true);
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testServerMaxMessagesPerReadRespectedWithoutAutoReadSharedGroup() throws Exception {
         testServerMaxMessagesPerReadRespected(sharedGroup, sharedGroup, false);
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testServerMaxMessagesPerReadRespectedWithAutoReadDifferentGroup() throws Exception {
         testServerMaxMessagesPerReadRespected(group1, group2, true);
     }
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testServerMaxMessagesPerReadRespectedWithoutAutoReadDifferentGroup() throws Exception {
         testServerMaxMessagesPerReadRespected(group1, group2, false);
     }
 
-    private void testServerMaxMessagesPerReadRespected(
+    private static void testServerMaxMessagesPerReadRespected(
             EventLoopGroup serverGroup, EventLoopGroup clientGroup, final boolean autoRead) throws Exception {
         final CountDownLatch countDownLatch = new CountDownLatch(5);
         Bootstrap cb = new Bootstrap();
@@ -1093,10 +1105,10 @@ public class LocalChannelTest {
         Channel cc = null;
         try {
             // Start server
-            sc = sb.bind(TEST_ADDRESS).sync().channel();
+            sc = sb.bind(TEST_ADDRESS).get();
             for (int i = 0; i < 5; i++) {
                 try {
-                    cc = cb.connect(TEST_ADDRESS).sync().channel();
+                    cc = cb.connect(TEST_ADDRESS).get();
                 } finally {
                     closeChannel(cc);
                 }

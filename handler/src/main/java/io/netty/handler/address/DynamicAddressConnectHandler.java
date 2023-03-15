@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,8 +17,7 @@ package io.netty.handler.address;
 
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
-
+import io.netty.util.concurrent.Future;
 import java.net.NetworkInterface;
 import java.net.SocketAddress;
 
@@ -32,22 +31,21 @@ import java.net.SocketAddress;
 public abstract class DynamicAddressConnectHandler implements ChannelHandler {
 
     @Override
-    public final void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress,
-                              SocketAddress localAddress, ChannelPromise promise) {
+    public final Future<Void> connect(ChannelHandlerContext ctx, SocketAddress remoteAddress,
+                                      SocketAddress localAddress) {
         final SocketAddress remote;
         final SocketAddress local;
         try {
             remote = remoteAddress(remoteAddress, localAddress);
             local = localAddress(remoteAddress, localAddress);
         } catch (Exception e) {
-            promise.setFailure(e);
-            return;
+            return ctx.newFailedFuture(e);
         }
-        ctx.connect(remote, local, promise).addListener(future -> {
+        return ctx.connect(remote, local).addListener(future -> {
             if (future.isSuccess()) {
                 // We only remove this handler from the pipeline once the connect was successful as otherwise
                 // the user may try to connect again.
-                ctx.pipeline().remove(DynamicAddressConnectHandler.this);
+                ctx.pipeline().remove(this);
             }
         });
     }

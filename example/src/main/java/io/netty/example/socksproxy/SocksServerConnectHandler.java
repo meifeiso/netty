@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,8 +17,6 @@ package io.netty.example.socksproxy;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
@@ -32,7 +30,6 @@ import io.netty.handler.codec.socksx.v5.DefaultSocks5CommandResponse;
 import io.netty.handler.codec.socksx.v5.Socks5CommandRequest;
 import io.netty.handler.codec.socksx.v5.Socks5CommandStatus;
 import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
 
 @ChannelHandler.Sharable
@@ -41,19 +38,18 @@ public final class SocksServerConnectHandler extends SimpleChannelInboundHandler
     private final Bootstrap b = new Bootstrap();
 
     @Override
-    public void channelRead0(final ChannelHandlerContext ctx, final SocksMessage message) throws Exception {
+    public void messageReceived(final ChannelHandlerContext ctx, final SocksMessage message) throws Exception {
         if (message instanceof Socks4CommandRequest) {
             final Socks4CommandRequest request = (Socks4CommandRequest) message;
             Promise<Channel> promise = ctx.executor().newPromise();
-            promise.addListener(
-                    (FutureListener<Channel>) future -> {
+            promise.addListener(future -> {
                         final Channel outboundChannel = future.getNow();
                         if (future.isSuccess()) {
-                            ChannelFuture responseFuture = ctx.channel().writeAndFlush(
+                            Future<Void> responseFuture = ctx.channel().writeAndFlush(
                                     new DefaultSocks4CommandResponse(Socks4CommandStatus.SUCCESS));
 
-                            responseFuture.addListener((ChannelFutureListener) channelFuture -> {
-                                ctx.pipeline().remove(SocksServerConnectHandler.this);
+                            responseFuture.addListener(fut -> {
+                                ctx.pipeline().remove(this);
                                 outboundChannel.pipeline().addLast(new RelayHandler(ctx.channel()));
                                 ctx.pipeline().addLast(new RelayHandler(outboundChannel));
                             });
@@ -65,13 +61,13 @@ public final class SocksServerConnectHandler extends SimpleChannelInboundHandler
                     });
 
             final Channel inboundChannel = ctx.channel();
-            b.group(inboundChannel.eventLoop())
+            b.group(inboundChannel.executor())
                     .channel(NioSocketChannel.class)
                     .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                     .option(ChannelOption.SO_KEEPALIVE, true)
                     .handler(new DirectClientHandler(promise));
 
-            b.connect(request.dstAddr(), request.dstPort()).addListener((ChannelFutureListener) future -> {
+            b.connect(request.dstAddr(), request.dstPort()).addListener(future -> {
                 if (future.isSuccess()) {
                     // Connection established use handler provided results
                 } else {
@@ -85,19 +81,18 @@ public final class SocksServerConnectHandler extends SimpleChannelInboundHandler
         } else if (message instanceof Socks5CommandRequest) {
             final Socks5CommandRequest request = (Socks5CommandRequest) message;
             Promise<Channel> promise = ctx.executor().newPromise();
-            promise.addListener(
-                    (FutureListener<Channel>) future -> {
+            promise.addListener(future -> {
                         final Channel outboundChannel = future.getNow();
                         if (future.isSuccess()) {
-                            ChannelFuture responseFuture =
+                            Future<Void> responseFuture =
                                     ctx.channel().writeAndFlush(new DefaultSocks5CommandResponse(
                                             Socks5CommandStatus.SUCCESS,
                                             request.dstAddrType(),
                                             request.dstAddr(),
                                             request.dstPort()));
 
-                            responseFuture.addListener((ChannelFutureListener) channelFuture -> {
-                                ctx.pipeline().remove(SocksServerConnectHandler.this);
+                            responseFuture.addListener(fut -> {
+                                ctx.pipeline().remove(this);
                                 outboundChannel.pipeline().addLast(new RelayHandler(ctx.channel()));
                                 ctx.pipeline().addLast(new RelayHandler(outboundChannel));
                             });
@@ -109,13 +104,13 @@ public final class SocksServerConnectHandler extends SimpleChannelInboundHandler
                     });
 
             final Channel inboundChannel = ctx.channel();
-            b.group(inboundChannel.eventLoop())
+            b.group(inboundChannel.executor())
                     .channel(NioSocketChannel.class)
                     .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                     .option(ChannelOption.SO_KEEPALIVE, true)
                     .handler(new DirectClientHandler(promise));
 
-            b.connect(request.dstAddr(), request.dstPort()).addListener((ChannelFutureListener) future -> {
+            b.connect(request.dstAddr(), request.dstPort()).addListener(future -> {
                 if (future.isSuccess()) {
                     // Connection established use handler provided results
                 } else {

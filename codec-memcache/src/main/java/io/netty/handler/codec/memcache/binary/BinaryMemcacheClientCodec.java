@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,12 +16,22 @@
 package io.netty.handler.codec.memcache.binary;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.CombinedChannelDuplexHandler;
 import io.netty.handler.codec.PrematureChannelClosureException;
 import io.netty.handler.codec.memcache.LastMemcacheContent;
+import io.netty.util.Attribute;
+import io.netty.util.AttributeKey;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.UnstableApi;
 
+import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -84,24 +94,196 @@ public final class BinaryMemcacheClientCodec extends
 
     private final class Decoder extends BinaryMemcacheResponseDecoder {
 
+        private ChannelHandlerContext context;
+
         Decoder(int chunkSize) {
             super(chunkSize);
         }
 
         @Override
-        protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-            int oldSize = out.size();
-            super.decode(ctx, in, out);
+        protected void handlerAdded0(final ChannelHandlerContext ctx) {
+            context = new ChannelHandlerContext() {
+                @Override
+                public Channel channel() {
+                    return ctx.channel();
+                }
 
-            if (failOnMissingResponse) {
-                final int size = out.size();
-                for (int i = oldSize; i < size; i ++) {
-                    Object msg = out.get(i);
-                    if (msg instanceof LastMemcacheContent) {
+                @Override
+                public EventExecutor executor() {
+                    return ctx.executor();
+                }
+
+                @Override
+                public String name() {
+                    return ctx.name();
+                }
+
+                @Override
+                public ChannelHandler handler() {
+                    return ctx.handler();
+                }
+
+                @Override
+                public boolean isRemoved() {
+                    return ctx.isRemoved();
+                }
+
+                @Override
+                public ChannelHandlerContext fireChannelRegistered() {
+                    ctx.fireChannelRegistered();
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext fireChannelUnregistered() {
+                    ctx.fireChannelUnregistered();
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext fireChannelActive() {
+                    ctx.fireChannelActive();
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext fireChannelInactive() {
+                    ctx.fireChannelInactive();
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext fireExceptionCaught(Throwable cause) {
+                    ctx.fireExceptionCaught(cause);
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext fireUserEventTriggered(Object evt) {
+                    ctx.fireUserEventTriggered(evt);
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext fireChannelRead(Object msg) {
+                    if (failOnMissingResponse && msg instanceof LastMemcacheContent) {
                         requestResponseCounter.decrementAndGet();
                     }
+                    ctx.fireChannelRead(msg);
+                    return this;
                 }
-            }
+
+                @Override
+                public ChannelHandlerContext fireChannelReadComplete() {
+                    ctx.fireChannelReadComplete();
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext fireChannelWritabilityChanged() {
+                    ctx.fireChannelWritabilityChanged();
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext read() {
+                    ctx.read();
+                    return this;
+                }
+
+                @Override
+                public ChannelHandlerContext flush() {
+                    ctx.flush();
+                    return this;
+                }
+
+                @Override
+                public ChannelPipeline pipeline() {
+                    return ctx.pipeline();
+                }
+
+                @Override
+                public ByteBufAllocator alloc() {
+                    return ctx.alloc();
+                }
+
+                @Override
+                @Deprecated
+                public <T> Attribute<T> attr(AttributeKey<T> key) {
+                    return ctx.attr(key);
+                }
+
+                @Override
+                @Deprecated
+                public <T> boolean hasAttr(AttributeKey<T> key) {
+                    return ctx.hasAttr(key);
+                }
+
+                @Override
+                public Future<Void> bind(SocketAddress localAddress) {
+                    return ctx.bind(localAddress);
+                }
+
+                @Override
+                public Future<Void> connect(SocketAddress remoteAddress) {
+                    return ctx.connect(remoteAddress);
+                }
+
+                @Override
+                public Future<Void> connect(SocketAddress remoteAddress, SocketAddress localAddress) {
+                    return ctx.connect(remoteAddress, localAddress);
+                }
+
+                @Override
+                public Future<Void> disconnect() {
+                    return ctx.disconnect();
+                }
+
+                @Override
+                public Future<Void> close() {
+                    return ctx.close();
+                }
+
+                @Override
+                public Future<Void> deregister() {
+                    return ctx.deregister();
+                }
+
+                @Override
+                public Future<Void> register() {
+                    return ctx.register();
+                }
+
+                @Override
+                public Future<Void> write(Object msg) {
+                    return ctx.write(msg);
+                }
+
+                @Override
+                public Future<Void> writeAndFlush(Object msg) {
+                    return ctx.writeAndFlush(msg);
+                }
+
+                @Override
+                public Promise<Void> newPromise() {
+                    return ctx.newPromise();
+                }
+
+                @Override
+                public Future<Void> newSucceededFuture() {
+                    return ctx.newSucceededFuture();
+                }
+
+                @Override
+                public Future<Void> newFailedFuture(Throwable cause) {
+                    return ctx.newFailedFuture(cause);
+                }
+            };
+        }
+
+        @Override
+        protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+            super.decode(context, in);
         }
 
         @Override

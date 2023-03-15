@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,11 +15,11 @@
  */
 package io.netty.example.telnet;
 
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.util.concurrent.Future;
 
 import java.net.InetAddress;
 import java.util.Date;
@@ -39,7 +39,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
     }
 
     @Override
-    public void channelRead0(ChannelHandlerContext ctx, String request) throws Exception {
+    public void messageReceived(ChannelHandlerContext ctx, String request) throws Exception {
         // Generate and write a response.
         String response;
         boolean close = false;
@@ -54,12 +54,12 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
 
         // We do not need to write a ChannelBuffer here.
         // We know the encoder inserted at TelnetPipelineFactory will do the conversion.
-        ChannelFuture future = ctx.write(response);
+        Future<Void> future = ctx.write(response);
 
         // Close the connection after sending 'Have a good day!'
         // if the client has sent 'bye'.
         if (close) {
-            future.addListener(ChannelFutureListener.CLOSE);
+            future.addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
         }
     }
 

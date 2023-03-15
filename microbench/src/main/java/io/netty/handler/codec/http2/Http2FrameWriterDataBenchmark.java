@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -18,13 +18,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.ChannelPromise;
 import io.netty.microbench.channel.EmbeddedChannelWriteReleaseHandlerContext;
 import io.netty.microbench.util.AbstractMicrobenchmark;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -49,6 +48,7 @@ import static io.netty.handler.codec.http2.Http2CodecUtil.MAX_UNSIGNED_BYTE;
 import static io.netty.handler.codec.http2.Http2CodecUtil.verifyPadding;
 import static io.netty.handler.codec.http2.Http2CodecUtil.writeFrameHeaderInternal;
 import static io.netty.handler.codec.http2.Http2FrameTypes.DATA;
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
@@ -101,31 +101,31 @@ public class Http2FrameWriterDataBenchmark extends AbstractMicrobenchmark {
     @Benchmark
     @BenchmarkMode(Mode.AverageTime)
     public void newWriter() {
-        writer.writeData(ctx, 3, payload.retain(), padding, true, ctx.voidPromise());
+        writer.writeData(ctx, 3, payload.retain(), padding, true);
         ctx.flush();
     }
 
     @Benchmark
     @BenchmarkMode(Mode.AverageTime)
     public void oldWriter() {
-        oldWriter.writeData(ctx, 3, payload.retain(), padding, true, ctx.voidPromise());
+        oldWriter.writeData(ctx, 3, payload.retain(), padding, true);
         ctx.flush();
     }
 
     private static final class OldDefaultHttp2FrameWriter implements Http2DataWriter {
         private static final ByteBuf ZERO_BUFFER =
                 unreleasableBuffer(directBuffer(MAX_UNSIGNED_BYTE).writeZero(MAX_UNSIGNED_BYTE)).asReadOnly();
-        private int maxFrameSize = DEFAULT_MAX_FRAME_SIZE;
+        private final int maxFrameSize = DEFAULT_MAX_FRAME_SIZE;
         @Override
-        public ChannelFuture writeData(ChannelHandlerContext ctx, int streamId, ByteBuf data,
-                                       int padding, boolean endStream, ChannelPromise promise) {
+        public Future<Void> writeData(ChannelHandlerContext ctx, int streamId, ByteBuf data,
+                                      int padding, boolean endStream) {
             final Http2CodecUtil.SimpleChannelPromiseAggregator promiseAggregator =
-                    new Http2CodecUtil.SimpleChannelPromiseAggregator(promise, ctx.channel(), ctx.executor());
+                    new Http2CodecUtil.SimpleChannelPromiseAggregator(ctx.newPromise(), ctx.executor());
             final DataFrameHeader header = new DataFrameHeader(ctx, streamId);
             boolean needToReleaseHeaders = true;
             boolean needToReleaseData = true;
             try {
-                verifyStreamId(streamId, "Stream ID");
+                checkPositive(streamId, "streamId");
                 verifyPadding(padding);
 
                 boolean lastFrame;
@@ -133,7 +133,7 @@ public class Http2FrameWriterDataBenchmark extends AbstractMicrobenchmark {
                 do {
                     // Determine how much data and padding to write in this frame. Put all padding at the end.
                     int frameDataBytes = min(remainingData, maxFrameSize);
-                    int framePaddingBytes = min(padding, max(0, (maxFrameSize - 1) - frameDataBytes));
+                    int framePaddingBytes = min(padding, max(0, maxFrameSize - 1 - frameDataBytes));
 
                     // Decrement the remaining counters.
                     padding -= framePaddingBytes;
@@ -145,18 +145,19 @@ public class Http2FrameWriterDataBenchmark extends AbstractMicrobenchmark {
                     // Only the last frame is not retained. Until then, the outer finally must release.
                     ByteBuf frameHeader = header.slice(frameDataBytes, framePaddingBytes, lastFrame && endStream);
                     needToReleaseHeaders = !lastFrame;
-                    ctx.write(lastFrame ? frameHeader : frameHeader.retain(), promiseAggregator.newPromise());
+                    ctx.write(lastFrame ? frameHeader : frameHeader.retain()).cascadeTo(promiseAggregator.newPromise());
 
                     // Write the frame data.
                     ByteBuf frameData = data.readSlice(frameDataBytes);
                     // Only the last frame is not retained. Until then, the outer finally must release.
                     needToReleaseData = !lastFrame;
-                    ctx.write(lastFrame ? frameData : frameData.retain(), promiseAggregator.newPromise());
+                    ctx.write(lastFrame ? frameData : frameData.retain())
+                            .cascadeTo(promiseAggregator.newPromise());
 
                     // Write the frame padding.
                     if (paddingBytes(framePaddingBytes) > 0) {
-                        ctx.write(ZERO_BUFFER.slice(0, paddingBytes(framePaddingBytes)),
-                                promiseAggregator.newPromise());
+                        ctx.write(ZERO_BUFFER.slice(0, paddingBytes(framePaddingBytes)))
+                                .cascadeTo(promiseAggregator.newPromise());
                     }
                 } while (!lastFrame);
             } catch (Throwable t) {
@@ -174,12 +175,6 @@ public class Http2FrameWriterDataBenchmark extends AbstractMicrobenchmark {
                 return promiseAggregator;
             }
             return promiseAggregator.doneAllocatingPromises();
-        }
-
-        private static void verifyStreamId(int streamId, String argumentName) {
-            if (streamId <= 0) {
-                throw new IllegalArgumentException(argumentName + " must be > 0");
-            }
         }
 
         private static int paddingBytes(int padding) {

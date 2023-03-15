@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,11 +16,13 @@
 
 package io.netty.util.internal;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Date;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TypeParameterMatcherTest {
 
@@ -38,9 +40,9 @@ public class TypeParameterMatcherTest {
         assertFalse(m.match(new CC()));
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testUnsolvedParameter() throws Exception {
-        TypeParameterMatcher.find(new TypeQ(), TypeX.class, "B");
+        assertThrows(IllegalStateException.class, () -> TypeParameterMatcher.find(new TypeQ(), TypeX.class, "B"));
     }
 
     @Test
@@ -135,10 +137,12 @@ public class TypeParameterMatcherTest {
         T t;
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testErasure() throws Exception {
-        TypeParameterMatcher m = TypeParameterMatcher.find(new X<String, Date>(), W.class, "E");
-        assertTrue(m.match(new Date()));
-        assertFalse(m.match(new Object()));
+        assertThrows(IllegalStateException.class, () -> {
+            TypeParameterMatcher m = TypeParameterMatcher.find(new X<String, Date>(), W.class, "E");
+            assertTrue(m.match(new Date()));
+            assertFalse(m.match(new Object()));
+        });
     }
 }

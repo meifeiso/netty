@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,13 +18,13 @@ package io.netty.channel.local;
 import io.netty.channel.AbstractServerChannel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultChannelConfig;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.PreferHeapByteBufAllocator;
 import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.ServerChannel;
+import io.netty.util.concurrent.Promise;
 
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
@@ -112,10 +112,10 @@ public class LocalServerChannel extends AbstractServerChannel {
 
     LocalChannel serve(final LocalChannel peer) {
         final LocalChannel child = newLocalChannel(peer);
-        if (eventLoop().inEventLoop()) {
+        if (executor().inEventLoop()) {
             serve0(child);
         } else {
-            eventLoop().execute(() -> serve0(child));
+            executor().execute(() -> serve0(child));
         }
         return child;
     }
@@ -160,7 +160,7 @@ public class LocalServerChannel extends AbstractServerChannel {
 
     private final class DefaultServerUnsafe extends AbstractUnsafe implements LocalChannelUnsafe {
         @Override
-        public void connect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
+        public void connect(SocketAddress remoteAddress, SocketAddress localAddress, Promise<Void> promise) {
             safeSetFailure(promise, new UnsupportedOperationException());
         }
 
@@ -170,6 +170,11 @@ public class LocalServerChannel extends AbstractServerChannel {
 
         @Override
         public void deregister0() {
+        }
+
+        @Override
+        public Promise<Void> newPromise() {
+            return LocalServerChannel.this.newPromise();
         }
     }
 }

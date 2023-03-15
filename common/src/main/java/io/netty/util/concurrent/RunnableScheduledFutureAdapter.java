@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -29,8 +29,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 @SuppressWarnings("ComparableImplementedButEqualsNotOverridden")
-final class RunnableScheduledFutureAdapter<V> implements RunnableScheduledFuture<V>,
-        AbstractScheduledEventExecutor.RunnableScheduledFutureNode<V> {
+final class RunnableScheduledFutureAdapter<V> implements AbstractScheduledEventExecutor.RunnableScheduledFutureNode<V> {
     private static final AtomicLong NEXT_TASK_ID = new AtomicLong();
 
     private final long id = NEXT_TASK_ID.getAndIncrement();
@@ -130,8 +129,6 @@ final class RunnableScheduledFutureAdapter<V> implements RunnableScheduledFuture
     }
 
     /**
-     * {@inheritDoc}
-     *
      * @param mayInterruptIfRunning this value has no effect in this implementation.
      */
     @Override
@@ -149,6 +146,11 @@ final class RunnableScheduledFutureAdapter<V> implements RunnableScheduledFuture
     }
 
     @Override
+    public boolean isFailed() {
+        return promise.isFailed();
+    }
+
+    @Override
     public boolean isCancellable() {
         return promise.isCancellable();
     }
@@ -159,26 +161,14 @@ final class RunnableScheduledFutureAdapter<V> implements RunnableScheduledFuture
     }
 
     @Override
-    public RunnableScheduledFuture<V> addListener(GenericFutureListener<? extends Future<? super V>> listener) {
+    public RunnableScheduledFuture<V> addListener(FutureListener<? super V> listener) {
         promise.addListener(listener);
         return this;
     }
 
     @Override
-    public RunnableScheduledFuture<V> addListeners(GenericFutureListener<? extends Future<? super V>>... listeners) {
-        promise.addListeners(listeners);
-        return this;
-    }
-
-    @Override
-    public RunnableScheduledFuture<V> removeListener(GenericFutureListener<? extends Future<? super V>> listener) {
-        promise.removeListener(listener);
-        return this;
-    }
-
-    @Override
-    public RunnableScheduledFuture<V> removeListeners(GenericFutureListener<? extends Future<? super V>>... listeners) {
-        promise.removeListeners(listeners);
+    public <C> RunnableScheduledFuture<V> addListener(C context, FutureContextListener<? super C, ? super V> listener) {
+        promise.addListener(context, listener);
         return this;
     }
 

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,20 +18,21 @@ package io.netty.testsuite.transport.socket;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.codec.serialization.ClassResolvers;
 import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class SocketObjectEchoTest extends AbstractSocketTest {
 
@@ -51,8 +52,8 @@ public class SocketObjectEchoTest extends AbstractSocketTest {
     }
 
     @Test
-    public void testObjectEcho() throws Throwable {
-        run();
+    public void testObjectEcho(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testObjectEcho);
     }
 
     public void testObjectEcho(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -60,8 +61,8 @@ public class SocketObjectEchoTest extends AbstractSocketTest {
     }
 
     @Test
-    public void testObjectEchoNotAutoRead() throws Throwable {
-        run();
+    public void testObjectEchoNotAutoRead(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testObjectEchoNotAutoRead);
     }
 
     public void testObjectEchoNotAutoRead(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -95,8 +96,8 @@ public class SocketObjectEchoTest extends AbstractSocketTest {
             }
         });
 
-        Channel sc = sb.bind().sync().channel();
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
+        Channel sc = sb.bind().get();
+        Channel cc = cb.connect(sc.localAddress()).get();
         for (String element : data) {
             cc.writeAndFlush(element);
         }
@@ -149,7 +150,7 @@ public class SocketObjectEchoTest extends AbstractSocketTest {
         }
     }
 
-    private static class EchoHandler implements ChannelInboundHandler {
+    private static class EchoHandler implements ChannelHandler {
         private final boolean autoRead;
         volatile Channel channel;
         final AtomicReference<Throwable> exception = new AtomicReference<>();

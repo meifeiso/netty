@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,7 +21,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
@@ -34,23 +34,25 @@ import io.netty.channel.socket.ChannelOutputShutdownEvent;
 import io.netty.channel.socket.DuplexChannel;
 import io.netty.util.UncheckedBooleanSupplier;
 import io.netty.util.internal.PlatformDependent;
-import org.junit.Assume;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class SocketHalfClosedTest extends AbstractSocketTest {
-    @Test(timeout = 10000)
-    public void testHalfClosureOnlyOneEventWhenAutoRead() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 10000, unit = MILLISECONDS)
+    public void testHalfClosureOnlyOneEventWhenAutoRead(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testHalfClosureOnlyOneEventWhenAutoRead);
     }
 
     public void testHalfClosureOnlyOneEventWhenAutoRead(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -101,8 +103,8 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
                 }
             });
 
-            serverChannel = sb.bind().sync().channel();
-            Channel clientChannel = cb.connect(serverChannel.localAddress()).sync().channel();
+            serverChannel = sb.bind().get();
+            Channel clientChannel = cb.connect(serverChannel.localAddress()).get();
             clientChannel.closeFuture().await();
             assertEquals(1, shutdownEventReceivedCounter.get());
             assertEquals(1, shutdownReadCompleteEventReceivedCounter.get());
@@ -114,8 +116,8 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
     }
 
     @Test
-    public void testAllDataReadAfterHalfClosure() throws Throwable {
-        run();
+    public void testAllDataReadAfterHalfClosure(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testAllDataReadAfterHalfClosure);
     }
 
     public void testAllDataReadAfterHalfClosure(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -146,8 +148,8 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
                         public void channelActive(ChannelHandlerContext ctx) throws Exception {
                             ByteBuf buf = ctx.alloc().buffer(totalServerBytesWritten);
                             buf.writerIndex(buf.capacity());
-                            ctx.writeAndFlush(buf).addListener((ChannelFutureListener) future ->
-                                    ((DuplexChannel) future.channel()).shutdownOutput());
+                            ctx.writeAndFlush(buf).addListener((DuplexChannel) ctx.channel(), (c, f) ->
+                                    c.shutdownOutput());
                             serverInitializedLatch.countDown();
                         }
 
@@ -200,15 +202,15 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
                 }
             });
 
-            serverChannel = sb.bind().sync().channel();
-            clientChannel = cb.connect(serverChannel.localAddress()).sync().channel();
+            serverChannel = sb.bind().get();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
             clientChannel.read();
 
             serverInitializedLatch.await();
             clientReadAllDataLatch.await();
             clientHalfClosedLatch.await();
-            assertTrue("too many read complete events: " + clientReadCompletes.get(),
-                    totalServerBytesWritten / numReadsPerReadLoop + 10 > clientReadCompletes.get());
+            assertTrue(totalServerBytesWritten / numReadsPerReadLoop + 10 > clientReadCompletes.get(),
+                "too many read complete events: " + clientReadCompletes.get());
         } finally {
             if (clientChannel != null) {
                 clientChannel.close().sync();
@@ -220,10 +222,10 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
     }
 
     @Test
-    public void testAutoCloseFalseDoesShutdownOutput() throws Throwable {
+    public void testAutoCloseFalseDoesShutdownOutput(TestInfo testInfo) throws Throwable {
         // This test only works on Linux / BSD / MacOS as we assume some semantics that are not true for Windows.
-        Assume.assumeFalse(PlatformDependent.isWindows());
-        run();
+        assumeFalse(PlatformDependent.isWindows());
+        run(testInfo, this::testAutoCloseFalseDoesShutdownOutput);
     }
 
     public void testAutoCloseFalseDoesShutdownOutput(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -236,7 +238,7 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
     private static void testAutoCloseFalseDoesShutdownOutput(boolean allowHalfClosed,
                                                              final boolean clientIsLeader,
                                                              ServerBootstrap sb,
-                                                             Bootstrap cb) throws InterruptedException {
+                                                             Bootstrap cb) throws Exception {
         final int expectedBytes = 100;
         final CountDownLatch serverReadExpectedLatch = new CountDownLatch(1);
         final CountDownLatch doneLatch = new CountDownLatch(1);
@@ -269,8 +271,8 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
                 }
             });
 
-            serverChannel = sb.bind().sync().channel();
-            clientChannel = cb.connect(serverChannel.localAddress()).sync().channel();
+            serverChannel = sb.bind().get();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
 
             doneLatch.await();
             assertNull(causeRef.get());
@@ -311,20 +313,20 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+        protected void messageReceived(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
             bytesRead += msg.readableBytes();
             if (bytesRead >= expectedBytes) {
                 // We write a reply and immediately close our end of the socket.
                 ByteBuf buf = ctx.alloc().buffer(expectedBytes);
                 buf.writerIndex(buf.writerIndex() + expectedBytes);
-                ctx.writeAndFlush(buf).addListener((ChannelFutureListener) future ->
-                        future.channel().close().addListener((ChannelFutureListener) future1 -> {
+                ctx.writeAndFlush(buf).addListener(ctx.channel(), (c, f) ->
+                        c.close().addListener(c, (channel, future) -> {
                     // This is a bit racy but there is no better way how to handle this in Java11.
                     // The problem is that on close() the underlying FD will not actually be closed directly
                     // but the close will be done after the Selector did process all events. Because of
                     // this we will need to give it a bit time to ensure the FD is actual closed before we
                     // count down the latch and try to write.
-                    future1.channel().eventLoop().schedule(followerCloseLatch::countDown, 200, TimeUnit.MILLISECONDS);
+                    channel.executor().schedule(followerCloseLatch::countDown, 200, MILLISECONDS);
                 }));
             }
         }
@@ -364,7 +366,7 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
             followerCloseLatch.await();
 
             // This write should fail, but we should still be allowed to read the peer's data
-            ctx.writeAndFlush(buf).addListener((ChannelFutureListener) future -> {
+            ctx.writeAndFlush(buf).addListener(future -> {
                 if (future.cause() == null) {
                     causeRef.set(new IllegalStateException("second write should have failed!"));
                     doneLatch.countDown();
@@ -373,7 +375,7 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+        protected void messageReceived(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
             bytesRead += msg.readableBytes();
             if (bytesRead >= expectedBytes) {
                 if (!seenOutputShutdown) {
@@ -411,8 +413,8 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
     }
 
     @Test
-    public void testAllDataReadClosure() throws Throwable {
-        run();
+    public void testAllDataReadClosure(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testAllDataReadClosure);
     }
 
     public void testAllDataReadClosure(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -445,7 +447,7 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
                         public void channelActive(ChannelHandlerContext ctx) throws Exception {
                             ByteBuf buf = ctx.alloc().buffer(totalServerBytesWritten);
                             buf.writerIndex(buf.capacity());
-                            ctx.writeAndFlush(buf).addListener(ChannelFutureListener.CLOSE);
+                            ctx.writeAndFlush(buf).addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
                             serverInitializedLatch.countDown();
                         }
 
@@ -505,15 +507,15 @@ public class SocketHalfClosedTest extends AbstractSocketTest {
                 }
             });
 
-            serverChannel = sb.bind().sync().channel();
-            clientChannel = cb.connect(serverChannel.localAddress()).sync().channel();
+            serverChannel = sb.bind().get();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
             clientChannel.read();
 
             serverInitializedLatch.await();
             clientReadAllDataLatch.await();
             clientHalfClosedLatch.await();
-            assertTrue("too many read complete events: " + clientReadCompletes.get(),
-                    totalServerBytesWritten / numReadsPerReadLoop + 10 > clientReadCompletes.get());
+            assertTrue(totalServerBytesWritten / numReadsPerReadLoop + 10 > clientReadCompletes.get(),
+                "too many read complete events: " + clientReadCompletes.get());
         } finally {
             if (clientChannel != null) {
                 clientChannel.close().sync();

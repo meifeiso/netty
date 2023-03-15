@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -25,13 +25,14 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.FixedLengthFrameDecoder;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class SocketFixedLengthEchoTest extends AbstractSocketTest {
 
@@ -43,13 +44,13 @@ public class SocketFixedLengthEchoTest extends AbstractSocketTest {
     }
 
     @Test
-    public void testFixedLengthEcho() throws Throwable {
-        run();
+    public void testFixedLengthEcho(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testFixedLengthEcho);
     }
 
     @Test
-    public void testFixedLengthEchoNotAutoRead() throws Throwable {
-        run();
+    public void testFixedLengthEchoNotAutoRead(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testFixedLengthEchoNotAutoRead);
     }
 
     public void testFixedLengthEcho(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -82,8 +83,8 @@ public class SocketFixedLengthEchoTest extends AbstractSocketTest {
             }
         });
 
-        Channel sc = sb.bind().sync().channel();
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
+        Channel sc = sb.bind().get();
+        Channel cc = cb.connect(sc.localAddress()).get();
         for (int i = 0; i < data.length;) {
             int length = Math.min(random.nextInt(1024 * 3), data.length - i);
             cc.writeAndFlush(Unpooled.wrappedBuffer(data, i, length));
@@ -157,7 +158,7 @@ public class SocketFixedLengthEchoTest extends AbstractSocketTest {
         }
 
         @Override
-        public void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+        public void messageReceived(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
             assertEquals(1024, msg.readableBytes());
 
             byte[] actual = new byte[msg.readableBytes()];

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -29,7 +29,7 @@ import static java.util.Objects.requireNonNull;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
@@ -48,7 +48,7 @@ public class HelloWorldHttp1Handler extends SimpleChannelInboundHandler<FullHttp
     }
 
     @Override
-    public void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
+    public void messageReceived(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
         if (HttpUtil.is100ContinueExpected(req)) {
             ctx.write(new DefaultFullHttpResponse(HTTP_1_1, CONTINUE, Unpooled.EMPTY_BUFFER));
         }
@@ -70,7 +70,7 @@ public class HelloWorldHttp1Handler extends SimpleChannelInboundHandler<FullHttp
         } else {
             // Tell the client we're going to close the connection.
             response.headers().set(CONNECTION, CLOSE);
-            ctx.write(response).addListener(ChannelFutureListener.CLOSE);
+            ctx.write(response).addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
         }
     }
 

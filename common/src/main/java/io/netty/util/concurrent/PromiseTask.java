@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -112,10 +112,6 @@ class PromiseTask<V> extends DefaultPromise<V> implements RunnableFuture<V> {
         return false;
     }
 
-    protected final boolean trySuccessInternal(V result) {
-        return super.trySuccess(result);
-    }
-
     @Override
     public final boolean setUncancellable() {
         throw new IllegalStateException();
@@ -123,26 +119,6 @@ class PromiseTask<V> extends DefaultPromise<V> implements RunnableFuture<V> {
 
     protected final boolean setUncancellableInternal() {
         return super.setUncancellable();
-    }
-
-    @Override
-    public Promise<V> addListener(GenericFutureListener<? extends Future<? super V>> listener) {
-        return super.addListener(listener);
-    }
-
-    @Override
-    public Promise<V> addListeners(GenericFutureListener<? extends Future<? super V>>... listeners) {
-        return super.addListeners(listeners);
-    }
-
-    @Override
-    public Promise<V> removeListener(GenericFutureListener<? extends Future<? super V>> listener) {
-        return super.removeListener(listener);
-    }
-
-    @Override
-    public Promise<V> removeListeners(GenericFutureListener<? extends Future<? super V>>... listeners) {
-        return super.removeListeners(listeners);
     }
 
     @Override

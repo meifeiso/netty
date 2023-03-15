@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,23 +20,21 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundInvoker;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
-
-import java.util.concurrent.Future;
+import io.netty.util.concurrent.Future;
+import io.netty.util.internal.ObjectUtil;
 
 /**
  * {@link ChannelHandler} which consolidates {@link Channel#flush()} / {@link ChannelHandlerContext#flush()}
  * operations (which also includes
- * {@link Channel#writeAndFlush(Object)} / {@link Channel#writeAndFlush(Object, ChannelPromise)} and
- * {@link ChannelOutboundInvoker#writeAndFlush(Object)} /
- * {@link ChannelOutboundInvoker#writeAndFlush(Object, ChannelPromise)}).
+ * {@link Channel#writeAndFlush(Object)} and
+ * {@link ChannelOutboundInvoker#writeAndFlush(Object)}.
  * <p>
  * Flush operations are generally speaking expensive as these may trigger a syscall on the transport level. Thus it is
  * in most cases (where write latency can be traded with throughput) a good idea to try to minimize flush operations
  * as much as possible.
  * <p>
- * If a read loop is currently ongoing, {@link #flush(ChannelHandlerContext)} will not be passed on to the next
- * {@link ChannelHandler} in the {@link ChannelPipeline}, as it will pick up any pending flushes when
+ * If a read loop is currently ongoing, {@link ChannelHandler#flush(ChannelHandlerContext)} will not be passed on to
+ * the next {@link ChannelHandler} in the {@link ChannelPipeline}, as it will pick up any pending flushes when
  * {@link #channelReadComplete(ChannelHandlerContext)} is triggered.
  * If no read loop is ongoing, the behavior depends on the {@code consolidateWhenNoReadInProgress} constructor argument:
  * <ul>
@@ -93,18 +91,15 @@ public class FlushConsolidationHandler implements ChannelHandler {
      *                                        ongoing.
      */
     public FlushConsolidationHandler(int explicitFlushAfterFlushes, boolean consolidateWhenNoReadInProgress) {
-        if (explicitFlushAfterFlushes <= 0) {
-            throw new IllegalArgumentException("explicitFlushAfterFlushes: "
-                    + explicitFlushAfterFlushes + " (expected: > 0)");
-        }
-        this.explicitFlushAfterFlushes = explicitFlushAfterFlushes;
+        this.explicitFlushAfterFlushes =
+                ObjectUtil.checkPositive(explicitFlushAfterFlushes, "explicitFlushAfterFlushes");
         this.consolidateWhenNoReadInProgress = consolidateWhenNoReadInProgress;
         flushTask = consolidateWhenNoReadInProgress ?
                 () -> {
                     if (flushPendingCount > 0 && !readInProgress) {
                         flushPendingCount = 0;
-                        ctx.flush();
                         nextScheduledFlush = null;
+                        ctx.flush();
                     } // else we'll flush when the read completes
                 }
                 : null;
@@ -116,7 +111,7 @@ public class FlushConsolidationHandler implements ChannelHandler {
     }
 
     @Override
-    public void flush(ChannelHandlerContext ctx) throws Exception {
+    public void flush(ChannelHandlerContext ctx) {
         if (readInProgress) {
             // If there is still a read in progress we are sure we will see a channelReadComplete(...) call. Thus
             // we only need to flush if we reach the explicitFlushAfterFlushes limit.
@@ -157,17 +152,17 @@ public class FlushConsolidationHandler implements ChannelHandler {
     }
 
     @Override
-    public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public Future<Void> disconnect(ChannelHandlerContext ctx) {
         // Try to flush one last time if flushes are pending before disconnect the channel.
         resetReadAndFlushIfNeeded(ctx);
-        ctx.disconnect(promise);
+        return ctx.disconnect();
     }
 
     @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public Future<Void> close(ChannelHandlerContext ctx) {
         // Try to flush one last time if flushes are pending before close the channel.
         resetReadAndFlushIfNeeded(ctx);
-        ctx.close(promise);
+        return ctx.close();
     }
 
     @Override
@@ -204,7 +199,7 @@ public class FlushConsolidationHandler implements ChannelHandler {
     private void scheduleFlush(final ChannelHandlerContext ctx) {
         if (nextScheduledFlush == null) {
             // Run as soon as possible, but still yield to give a chance for additional writes to enqueue.
-            nextScheduledFlush = ctx.channel().eventLoop().submit(flushTask);
+            nextScheduledFlush = ctx.channel().executor().submit(flushTask);
         }
     }
 

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,16 +19,15 @@ package io.netty.handler.codec.http2;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelProgressivePromise;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 
 import java.net.SocketAddress;
 
@@ -45,64 +44,64 @@ final class Http2FrameInboundWriter {
     }
 
     Http2FrameInboundWriter(EmbeddedChannel channel, Http2FrameWriter writer) {
-        this.ctx = new WriteInboundChannelHandlerContext(channel);
+        ctx = new WriteInboundChannelHandlerContext(channel);
         this.writer = writer;
     }
 
     void writeInboundData(int streamId, ByteBuf data, int padding, boolean endStream) {
-        writer.writeData(ctx, streamId, data, padding, endStream, ctx.newPromise()).syncUninterruptibly();
+        writer.writeData(ctx, streamId, data, padding, endStream).syncUninterruptibly();
     }
 
     void writeInboundHeaders(int streamId, Http2Headers headers,
                          int padding, boolean endStream) {
-        writer.writeHeaders(ctx, streamId, headers, padding, endStream, ctx.newPromise()).syncUninterruptibly();
+        writer.writeHeaders(ctx, streamId, headers, padding, endStream).syncUninterruptibly();
     }
 
     void writeInboundHeaders(int streamId, Http2Headers headers,
                                int streamDependency, short weight, boolean exclusive, int padding, boolean endStream) {
         writer.writeHeaders(ctx, streamId, headers, streamDependency,
-                weight, exclusive, padding, endStream, ctx.newPromise()).syncUninterruptibly();
+                weight, exclusive, padding, endStream).syncUninterruptibly();
     }
 
     void writeInboundPriority(int streamId, int streamDependency,
                                 short weight, boolean exclusive) {
         writer.writePriority(ctx, streamId, streamDependency, weight,
-                exclusive, ctx.newPromise()).syncUninterruptibly();
+                exclusive).syncUninterruptibly();
     }
 
     void writeInboundRstStream(int streamId, long errorCode) {
-        writer.writeRstStream(ctx, streamId, errorCode, ctx.newPromise()).syncUninterruptibly();
+        writer.writeRstStream(ctx, streamId, errorCode).syncUninterruptibly();
     }
 
     void writeInboundSettings(Http2Settings settings) {
-        writer.writeSettings(ctx, settings, ctx.newPromise()).syncUninterruptibly();
+        writer.writeSettings(ctx, settings).syncUninterruptibly();
     }
 
     void writeInboundSettingsAck() {
-        writer.writeSettingsAck(ctx, ctx.newPromise()).syncUninterruptibly();
+        writer.writeSettingsAck(ctx).syncUninterruptibly();
     }
 
     void writeInboundPing(boolean ack, long data) {
-        writer.writePing(ctx, ack, data, ctx.newPromise()).syncUninterruptibly();
+        writer.writePing(ctx, ack, data).syncUninterruptibly();
     }
 
     void writePushPromise(int streamId, int promisedStreamId,
                                    Http2Headers headers, int padding) {
            writer.writePushPromise(ctx, streamId, promisedStreamId,
-                   headers, padding, ctx.newPromise()).syncUninterruptibly();
+                   headers, padding).syncUninterruptibly();
     }
 
     void writeInboundGoAway(int lastStreamId, long errorCode, ByteBuf debugData) {
-        writer.writeGoAway(ctx, lastStreamId, errorCode, debugData, ctx.newPromise()).syncUninterruptibly();
+        writer.writeGoAway(ctx, lastStreamId, errorCode, debugData).syncUninterruptibly();
     }
 
     void writeInboundWindowUpdate(int streamId, int windowSizeIncrement) {
-        writer.writeWindowUpdate(ctx, streamId, windowSizeIncrement, ctx.newPromise()).syncUninterruptibly();
+        writer.writeWindowUpdate(ctx, streamId, windowSizeIncrement).syncUninterruptibly();
     }
 
     void writeInboundFrame(byte frameType, int streamId,
                              Http2Flags flags, ByteBuf payload) {
-        writer.writeFrame(ctx, frameType, streamId, flags, payload, ctx.newPromise()).syncUninterruptibly();
+        writer.writeFrame(ctx, frameType, streamId, flags, payload).syncUninterruptibly();
     }
 
     private static final class WriteInboundChannelHandlerContext
@@ -120,7 +119,7 @@ final class Http2FrameInboundWriter {
 
         @Override
         public EventExecutor executor() {
-            return channel.eventLoop();
+            return channel.executor();
         }
 
         @Override
@@ -225,125 +224,69 @@ final class Http2FrameInboundWriter {
         }
 
         @Override
-        public ChannelFuture bind(SocketAddress localAddress) {
+        public Future<Void> bind(SocketAddress localAddress) {
             return channel.bind(localAddress);
         }
 
         @Override
-        public ChannelFuture connect(SocketAddress remoteAddress) {
+        public Future<Void> connect(SocketAddress remoteAddress) {
             return channel.connect(remoteAddress);
         }
 
         @Override
-        public ChannelFuture connect(SocketAddress remoteAddress, SocketAddress localAddress) {
+        public Future<Void> connect(SocketAddress remoteAddress, SocketAddress localAddress) {
             return channel.connect(remoteAddress, localAddress);
         }
 
         @Override
-        public ChannelFuture disconnect() {
+        public Future<Void> disconnect() {
             return channel.disconnect();
         }
 
         @Override
-        public ChannelFuture close() {
+        public Future<Void> close() {
             return channel.close();
         }
 
         @Override
-        public ChannelFuture register() {
+        public Future<Void> register() {
             return channel.register();
         }
 
         @Override
-        public ChannelFuture deregister() {
+        public Future<Void> deregister() {
             return channel.deregister();
         }
 
         @Override
-        public ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
-            return channel.bind(localAddress, promise);
+        public Future<Void> write(Object msg) {
+            return writeAndFlush(msg);
         }
 
         @Override
-        public ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
-            return channel.connect(remoteAddress, promise);
-        }
-
-        @Override
-        public ChannelFuture connect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
-            return channel.connect(remoteAddress, localAddress, promise);
-        }
-
-        @Override
-        public ChannelFuture disconnect(ChannelPromise promise) {
-            return channel.disconnect(promise);
-        }
-
-        @Override
-        public ChannelFuture close(ChannelPromise promise) {
-            return channel.close(promise);
-        }
-
-        @Override
-        public ChannelFuture register(ChannelPromise promise) {
-            return channel.register(promise);
-        }
-
-        @Override
-        public ChannelFuture deregister(ChannelPromise promise) {
-            return channel.deregister(promise);
-        }
-
-        @Override
-        public ChannelFuture write(Object msg) {
-            return write(msg, newPromise());
-        }
-
-        @Override
-        public ChannelFuture write(Object msg, ChannelPromise promise) {
-            return writeAndFlush(msg, promise);
-        }
-
-        @Override
-        public ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
+        public Future<Void> writeAndFlush(Object msg) {
             try {
                 channel.writeInbound(msg);
                 channel.runPendingTasks();
-                promise.setSuccess();
             } catch (Throwable cause) {
-                promise.setFailure(cause);
+                return newFailedFuture(cause);
             }
-            return promise;
+            return newSucceededFuture();
         }
 
         @Override
-        public ChannelFuture writeAndFlush(Object msg) {
-            return writeAndFlush(msg, newPromise());
-        }
-
-        @Override
-        public ChannelPromise newPromise() {
+        public Promise<Void> newPromise() {
             return channel.newPromise();
         }
 
         @Override
-        public ChannelProgressivePromise newProgressivePromise() {
-            return channel.newProgressivePromise();
-        }
-
-        @Override
-        public ChannelFuture newSucceededFuture() {
+        public Future<Void> newSucceededFuture() {
             return channel.newSucceededFuture();
         }
 
         @Override
-        public ChannelFuture newFailedFuture(Throwable cause) {
+        public Future<Void> newFailedFuture(Throwable cause) {
             return channel.newFailedFuture(cause);
-        }
-
-        @Override
-        public ChannelPromise voidPromise() {
-            return channel.voidPromise();
         }
     }
 }

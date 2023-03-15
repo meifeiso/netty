@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,15 +16,16 @@
 package io.netty.channel.group;
 
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFuture;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.MultithreadEventLoopGroup;
 import io.netty.channel.nio.NioHandler;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GlobalEventExecutor;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class DefaultChannelGroupTest {
 
@@ -46,10 +47,10 @@ public class DefaultChannelGroupTest {
         });
         b.channel(NioServerSocketChannel.class);
 
-        ChannelFuture f = b.bind(0).syncUninterruptibly();
+        Future<Channel> f = b.bind(0).syncUninterruptibly();
 
         if (f.isSuccess()) {
-            allChannels.add(f.channel());
+            allChannels.add(f.getNow());
             allChannels.close().awaitUninterruptibly();
         }
 

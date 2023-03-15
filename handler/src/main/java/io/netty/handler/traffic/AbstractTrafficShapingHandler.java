@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,20 +16,24 @@
 package io.netty.handler.traffic;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufConvertible;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundBuffer;
-import io.netty.channel.ChannelPromise;
+import io.netty.channel.FileRegion;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.util.concurrent.TimeUnit;
+
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 
 /**
  * <p>AbstractTrafficShapingHandler allows to limit the global bandwidth
@@ -68,7 +72,7 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
     static final long DEFAULT_MAX_SIZE = 4 * 1024 * 1024L;
 
     /**
-     * Default minimal time to wait
+     * Default minimal time to wait: 10ms
      */
     static final long MINIMAL_WAIT = 10;
 
@@ -164,15 +168,12 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
      *            Must be positive.
      */
     protected AbstractTrafficShapingHandler(long writeLimit, long readLimit, long checkInterval, long maxTime) {
-        if (maxTime <= 0) {
-            throw new IllegalArgumentException("maxTime must be positive");
-        }
+        this.maxTime = checkPositive(maxTime, "maxTime");
 
         userDefinedWritabilityIndex = userDefinedWritabilityIndex();
         this.writeLimit = writeLimit;
         this.readLimit = readLimit;
         this.checkInterval = checkInterval;
-        this.maxTime = maxTime;
     }
 
     /**
@@ -346,10 +347,7 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
      *            Must be positive.
      */
     public void setMaxTimeWait(long maxTime) {
-        if (maxTime <= 0) {
-            throw new IllegalArgumentException("maxTime must be positive");
-        }
-        this.maxTime = maxTime;
+        this.maxTime = checkPositive(maxTime, "maxTime");
     }
 
     /**
@@ -377,10 +375,7 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
      *              Must be positive.
      */
     public void setMaxWriteDelay(long maxWriteDelay) {
-        if (maxWriteDelay <= 0) {
-            throw new IllegalArgumentException("maxWriteDelay must be positive");
-        }
-        this.maxWriteDelay = maxWriteDelay;
+        this.maxWriteDelay = checkPositive(maxWriteDelay, "maxWriteDelay");
     }
 
     /**
@@ -396,7 +391,7 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
      * use one of the way provided by Netty to handle the capacity:</p>
      * <p>- the {@code Channel.isWritable()} property and the corresponding
      * {@code channelWritabilityChanged()}</p>
-     * <p>- the {@code ChannelFuture.addListener(new GenericFutureListener())}</p>
+     * <p>- the {@code Future.addListener(future -> ...)}</p>
      *
      * @param maxWriteSize the maximum Write Size allowed in the buffer
      *            per channel before write suspended is set,
@@ -513,6 +508,15 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
         ctx.fireChannelRead(msg);
     }
 
+    @Override
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+        Channel channel = ctx.channel();
+        if (channel.hasAttr(REOPEN_TASK)) {
+            //release the reopen task
+            channel.attr(REOPEN_TASK).set(null);
+        }
+    }
+
     /**
      * Method overridden in GTSH to take into account specific timer for the channel.
      * @param wait the wait delay computed in ms
@@ -546,10 +550,10 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
     }
 
     @Override
-    public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise)
-            throws Exception {
+    public Future<Void> write(final ChannelHandlerContext ctx, final Object msg) {
         long size = calculateSize(msg);
         long now = TrafficCounter.milliSecondFromNano();
+        Promise<Void> promise = ctx.newPromise();
         if (size > 0) {
             // compute the number of ms to wait before continue with the channel
             long wait = trafficCounter.writeTimeToWait(size, writeLimit, maxTime, now);
@@ -559,22 +563,23 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
                             + isHandlerActive(ctx));
                 }
                 submitWrite(ctx, msg, size, wait, now, promise);
-                return;
+                return promise;
             }
         }
         // to maintain order of write
         submitWrite(ctx, msg, size, 0, now, promise);
+        return promise;
     }
 
     @Deprecated
     protected void submitWrite(final ChannelHandlerContext ctx, final Object msg,
-            final long delay, final ChannelPromise promise) {
+            final long delay, final Promise<Void> promise) {
         submitWrite(ctx, msg, calculateSize(msg),
                 delay, TrafficCounter.milliSecondFromNano(), promise);
     }
 
     abstract void submitWrite(
-            ChannelHandlerContext ctx, Object msg, long size, long delay, long now, ChannelPromise promise);
+            ChannelHandlerContext ctx, Object msg, long size, long delay, long now, Promise<Void> promise);
 
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
@@ -635,16 +640,20 @@ public abstract class AbstractTrafficShapingHandler implements ChannelHandler {
     /**
      * Calculate the size of the given {@link Object}.
      *
-     * This implementation supports {@link ByteBuf} and {@link ByteBufHolder}. Sub-classes may override this.
+     * This implementation supports {@link ByteBuf}, {@link ByteBufHolder} and {@link FileRegion}.
+     * Sub-classes may override this.
      * @param msg the msg for which the size should be calculated.
      * @return size the size of the msg or {@code -1} if unknown.
      */
     protected long calculateSize(Object msg) {
-        if (msg instanceof ByteBuf) {
-            return ((ByteBuf) msg).readableBytes();
+        if (msg instanceof ByteBufConvertible) {
+            return ((ByteBufConvertible) msg).asByteBuf().readableBytes();
         }
         if (msg instanceof ByteBufHolder) {
             return ((ByteBufHolder) msg).content().readableBytes();
+        }
+        if (msg instanceof FileRegion) {
+            return ((FileRegion) msg).count();
         }
         return -1;
     }

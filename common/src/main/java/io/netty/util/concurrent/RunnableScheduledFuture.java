@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -40,15 +40,9 @@ public interface RunnableScheduledFuture<V> extends
     long delayNanos(long currentTimeNanos);
 
     @Override
-    RunnableScheduledFuture<V> addListener(GenericFutureListener<? extends Future<? super V>> listener);
+    RunnableScheduledFuture<V> addListener(FutureListener<? super V> listener);
 
     @Override
-    RunnableScheduledFuture<V> addListeners(GenericFutureListener<? extends Future<? super V>>... listeners);
-
-    @Override
-    RunnableScheduledFuture<V> removeListener(GenericFutureListener<? extends Future<? super V>> listener);
-
-    @Override
-    RunnableScheduledFuture<V> removeListeners(GenericFutureListener<? extends Future<? super V>>... listeners);
+    <C> RunnableScheduledFuture<V> addListener(C context, FutureContextListener<? super C, ? super V> listener);
 }
 

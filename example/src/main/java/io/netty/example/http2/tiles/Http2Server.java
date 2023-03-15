@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,10 +16,8 @@
 
 package io.netty.example.http2.tiles;
 
-import static io.netty.handler.codec.http2.Http2SecurityUtil.CIPHERS;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -34,13 +32,15 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
-
-import java.security.cert.CertificateException;
+import io.netty.util.concurrent.Future;
 
 import javax.net.ssl.SSLException;
+import java.security.cert.CertificateException;
+
+import static io.netty.handler.codec.http2.Http2SecurityUtil.CIPHERS;
 
 /**
- * Demonstrates a Http2 server using Netty to display a bunch of images and
+ * Demonstrates an Http2 server using Netty to display a bunch of images and
  * simulate latency. It is a Netty version of the <a href="https://http2.golang.org/gophertiles?latency=0">
  * Go lang HTTP2 tiles demo</a>.
  */
@@ -54,7 +54,7 @@ public class Http2Server {
         group = eventLoopGroup;
     }
 
-    public ChannelFuture start() throws Exception {
+    public Future<Void> start() throws Exception {
         final SslContext sslCtx = configureTLS();
         ServerBootstrap b = new ServerBootstrap();
         b.option(ChannelOption.SO_BACKLOG, 1024);
@@ -65,7 +65,7 @@ public class Http2Server {
             }
         });
 
-        Channel ch = b.bind(PORT).sync().channel();
+        Channel ch = b.bind(PORT).get();
         return ch.closeFuture();
     }
 

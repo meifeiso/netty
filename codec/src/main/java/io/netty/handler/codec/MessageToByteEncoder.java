@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,8 +21,8 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.TypeParameterMatcher;
 
 
@@ -96,7 +96,7 @@ public abstract class MessageToByteEncoder<I> extends ChannelHandlerAdapter {
     }
 
     @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+    public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
         ByteBuf buf = null;
         try {
             if (acceptOutboundMessage(msg)) {
@@ -110,19 +110,17 @@ public abstract class MessageToByteEncoder<I> extends ChannelHandlerAdapter {
                 }
 
                 if (buf.isReadable()) {
-                    ctx.write(buf, promise);
-                } else {
-                    buf.release();
-                    ctx.write(Unpooled.EMPTY_BUFFER, promise);
+                    Future<Void> f = ctx.write(buf);
+                    buf = null;
+                    return f;
                 }
-                buf = null;
-            } else {
-                ctx.write(msg, promise);
+                return ctx.write(Unpooled.EMPTY_BUFFER);
             }
+            return ctx.write(msg);
         } catch (EncoderException e) {
-            throw e;
+            return ctx.newFailedFuture(e);
         } catch (Throwable e) {
-            throw new EncoderException(e);
+            return ctx.newFailedFuture(new EncoderException(e));
         } finally {
             if (buf != null) {
                 buf.release();

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,13 +18,13 @@ package io.netty.example.proxy;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 
-public class HexDumpProxyFrontendHandler implements ChannelInboundHandler {
+public class HexDumpProxyFrontendHandler implements ChannelHandler {
 
     private final String remoteHost;
     private final int remotePort;
@@ -44,13 +44,18 @@ public class HexDumpProxyFrontendHandler implements ChannelInboundHandler {
 
         // Start the connection attempt.
         Bootstrap b = new Bootstrap();
-        b.group(inboundChannel.eventLoop())
+        b.group(inboundChannel.executor())
          .channel(ctx.channel().getClass())
-         .handler(new HexDumpProxyBackendHandler(inboundChannel))
-         .option(ChannelOption.AUTO_READ, false);
-        ChannelFuture f = b.connect(remoteHost, remotePort);
-        outboundChannel = f.channel();
-        f.addListener((ChannelFutureListener) future -> {
+         .handler(new ChannelInitializer<Channel>() {
+             @Override
+             protected void initChannel(Channel ch) throws Exception {
+                 outboundChannel = ch;
+                 ch.pipeline().addLast(new HexDumpProxyBackendHandler(inboundChannel));
+             }
+         })
+         .option(ChannelOption.AUTO_READ, false)
+         .connect(remoteHost, remotePort)
+         .addListener(future -> {
             if (future.isSuccess()) {
                 // connection complete start to read first data
                 inboundChannel.read();
@@ -64,12 +69,12 @@ public class HexDumpProxyFrontendHandler implements ChannelInboundHandler {
     @Override
     public void channelRead(final ChannelHandlerContext ctx, Object msg) {
         if (outboundChannel.isActive()) {
-            outboundChannel.writeAndFlush(msg).addListener((ChannelFutureListener) future -> {
+            outboundChannel.writeAndFlush(msg).addListener(outboundChannel, (outbound, future) -> {
                 if (future.isSuccess()) {
                     // was able to flush out data, start to read the next chunk
                     ctx.channel().read();
                 } else {
-                    future.channel().close();
+                    outbound.close();
                 }
             });
         }
@@ -93,7 +98,7 @@ public class HexDumpProxyFrontendHandler implements ChannelInboundHandler {
      */
     static void closeOnFlush(Channel ch) {
         if (ch.isActive()) {
-            ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
+            ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ch, ChannelFutureListeners.CLOSE);
         }
     }
 }

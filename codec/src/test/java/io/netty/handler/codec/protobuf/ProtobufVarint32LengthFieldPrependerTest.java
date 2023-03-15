@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,18 +17,20 @@ package io.netty.handler.codec.protobuf;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static io.netty.buffer.Unpooled.*;
 import static org.hamcrest.core.Is.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ProtobufVarint32LengthFieldPrependerTest {
 
     private EmbeddedChannel ch;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         ch = new EmbeddedChannel(new ProtobufVarint32LengthFieldPrepender());
     }
@@ -62,16 +64,16 @@ public class ProtobufVarint32LengthFieldPrependerTest {
         final int num = 266;
         assertThat(ProtobufVarint32LengthFieldPrepender.computeRawVarint32Size(num), is(size));
         final byte[] buf = new byte[size + num];
-        /**
-         * 8    A    0    2
-         * 1000 1010 0000 0010
-         * 0000 1010 0000 0010
-         * 0000 0010 0000 1010
-         *  000 0010  000 1010
-         *
-         *  0000 0001 0000 1010
-         *  0    1    0    A
-         * 266
+        /*
+          8    A    0    2
+          1000 1010 0000 0010
+          0000 1010 0000 0010
+          0000 0010 0000 1010
+           000 0010  000 1010
+
+           0000 0001 0000 1010
+           0    1    0    A
+          266
          */
 
         buf[0] = (byte) (0x8A & 0xFF);
@@ -97,16 +99,16 @@ public class ProtobufVarint32LengthFieldPrependerTest {
         final int num = 0x4000;
         assertThat(ProtobufVarint32LengthFieldPrepender.computeRawVarint32Size(num), is(size));
         final byte[] buf = new byte[size + num];
-        /**
-         * 8    0    8    0    0    1
-         * 1000 0000 1000 0000 0000 0001
-         * 0000 0000 0000 0000 0000 0001
-         * 0000 0001 0000 0000 0000 0000
-         *  000 0001  000 0000  000 0000
-         *
-         *    0 0000 0100 0000 0000 0000
-         *    0    0    4    0    0    0
-         *
+        /*
+          8    0    8    0    0    1
+          1000 0000 1000 0000 0000 0001
+          0000 0000 0000 0000 0000 0001
+          0000 0001 0000 0000 0000 0000
+           000 0001  000 0000  000 0000
+
+             0 0000 0100 0000 0000 0000
+             0    0    4    0    0    0
+
          */
 
         buf[0] = (byte) (0x80 & 0xFF);
@@ -133,16 +135,16 @@ public class ProtobufVarint32LengthFieldPrependerTest {
         final int num = 0x200000;
         assertThat(ProtobufVarint32LengthFieldPrepender.computeRawVarint32Size(num), is(size));
         final byte[] buf = new byte[size + num];
-        /**
-         * 8    0    8    0    8    0    0    1
-         * 1000 0000 1000 0000 1000 0000 0000 0001
-         * 0000 0000 0000 0000 0000 0000 0000 0001
-         * 0000 0001 0000 0000 0000 0000 0000 0000
-         *  000 0001  000 0000  000 0000  000 0000
-         *
-         *    0000 0010 0000 0000 0000 0000 0000
-         *    0    2    0    0    0    0    0
-         *
+        /*
+          8    0    8    0    8    0    0    1
+          1000 0000 1000 0000 1000 0000 0000 0001
+          0000 0000 0000 0000 0000 0000 0000 0001
+          0000 0001 0000 0000 0000 0000 0000 0000
+           000 0001  000 0000  000 0000  000 0000
+
+             0000 0010 0000 0000 0000 0000 0000
+             0    2    0    0    0    0    0
+
          */
 
         buf[0] = (byte) (0x80 & 0xFF);

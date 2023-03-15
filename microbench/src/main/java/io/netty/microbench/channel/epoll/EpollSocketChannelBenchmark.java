@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,25 +22,24 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.MultithreadEventLoopGroup;
 import io.netty.channel.epoll.EpollHandler;
 import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.microbench.util.AbstractMicrobenchmark;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.GroupThreads;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.TearDown;
 
+import java.util.concurrent.TimeUnit;
+
 public class EpollSocketChannelBenchmark extends AbstractMicrobenchmark {
-    private static final Runnable runnable = new Runnable() {
-        @Override
-        public void run() { }
-    };
+    private static final Runnable runnable = () -> { };
 
     private EventLoopGroup group;
     private Channel serverChan;
@@ -66,7 +65,7 @@ public class EpollSocketChannelBenchmark extends AbstractMicrobenchmark {
                         @Override
                         public void channelRead(ChannelHandlerContext ctx, Object msg) {
                             if (msg instanceof ByteBuf) {
-                                ctx.writeAndFlush(msg, ctx.voidPromise());
+                                ctx.writeAndFlush(msg);
                             } else {
                                 throw new AssertionError();
                             }
@@ -75,8 +74,7 @@ public class EpollSocketChannelBenchmark extends AbstractMicrobenchmark {
                 }
             })
             .bind(0)
-            .sync()
-            .channel();
+            .get();
     chan = new Bootstrap()
         .channel(EpollSocketChannel.class)
         .handler(new ChannelInitializer<Channel>() {
@@ -84,7 +82,7 @@ public class EpollSocketChannelBenchmark extends AbstractMicrobenchmark {
             protected void initChannel(Channel ch) {
                 ch.pipeline().addLast(new ChannelHandler() {
 
-                private ChannelPromise lastWritePromise;
+                private Promise<Void> lastWritePromise;
 
                     @Override
                     public void channelRead(ChannelHandlerContext ctx, Object msg) {
@@ -93,7 +91,7 @@ public class EpollSocketChannelBenchmark extends AbstractMicrobenchmark {
                             ByteBuf buf = (ByteBuf) msg;
                             try {
                                 if (buf.readableBytes() == 1) {
-                                    lastWritePromise.trySuccess();
+                                    lastWritePromise.trySuccess(null);
                                     lastWritePromise = null;
                                 } else {
                                     throw new AssertionError();
@@ -107,21 +105,19 @@ public class EpollSocketChannelBenchmark extends AbstractMicrobenchmark {
                     }
 
                     @Override
-                    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-                            throws Exception {
+                    public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
                         if (lastWritePromise != null) {
                             throw new IllegalStateException();
                         }
-                        lastWritePromise = promise;
-                        ctx.write(msg, ctx.voidPromise());
+                        lastWritePromise = ctx.newPromise();
+                        return ctx.write(msg);
                     }
                 });
             }
         })
         .group(group)
         .connect(serverChan.localAddress())
-        .sync()
-        .channel();
+        .get();
 
         abyte = chan.alloc().directBuffer(1);
         abyte.writeByte('a');
@@ -143,12 +139,12 @@ public class EpollSocketChannelBenchmark extends AbstractMicrobenchmark {
 
     @Benchmark
     public Object executeSingle() throws Exception {
-        return chan.eventLoop().submit(runnable).get();
+        return chan.executor().submit(runnable).get();
     }
 
     @Benchmark
     @GroupThreads(3)
     public Object executeMulti() throws Exception {
-        return chan.eventLoop().submit(runnable).get();
+        return chan.executor().submit(runnable).get();
     }
 }

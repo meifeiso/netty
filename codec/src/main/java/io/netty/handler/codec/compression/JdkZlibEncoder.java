@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,19 +15,18 @@
  */
 package io.netty.handler.codec.compression;
 
-import static java.util.Objects.requireNonNull;
-
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
-import io.netty.channel.ChannelPromiseNotifier;
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.CRC32;
 import java.util.zip.Deflater;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Compresses a {@link ByteBuf} using the deflate algorithm.
@@ -81,6 +80,10 @@ public class JdkZlibEncoder extends ZlibEncoder {
         this(wrapper, 6);
     }
 
+    public JdkZlibEncoder(ZlibWrapper wrapper, int compressionLevel) {
+        this(wrapper, compressionLevel, false);
+    }
+
     /**
      * Creates a new zlib encoder with the specified {@code compressionLevel}
      * and the specified wrapper.
@@ -89,10 +92,12 @@ public class JdkZlibEncoder extends ZlibEncoder {
      *        {@code 1} yields the fastest compression and {@code 9} yields the
      *        best compression.  {@code 0} means no compression.  The default
      *        compression level is {@code 6}.
+     * @param preferDirectBuffers {@code true} if a direct {@link ByteBuf} should be tried to be used as target for
+     *                              decompression, or {@code false} if heap allocated {@link ByteBuf}s should be used.
      *
      * @throws CompressionException if failed to initialize zlib
      */
-    public JdkZlibEncoder(ZlibWrapper wrapper, int compressionLevel) {
+    public JdkZlibEncoder(ZlibWrapper wrapper, int compressionLevel, boolean preferDirectBuffers) {
         if (compressionLevel < 0 || compressionLevel > 9) {
             throw new IllegalArgumentException(
                     "compressionLevel: " + compressionLevel + " (expected: 0-9)");
@@ -149,21 +154,16 @@ public class JdkZlibEncoder extends ZlibEncoder {
     }
 
     @Override
-    public ChannelFuture close() {
-        return close(ctx().newPromise());
-    }
-
-    @Override
-    public ChannelFuture close(final ChannelPromise promise) {
+    public Future<Void> close() {
         ChannelHandlerContext ctx = ctx();
         EventExecutor executor = ctx.executor();
         if (executor.inEventLoop()) {
-            return finishEncode(ctx, promise);
+            return finishEncode(ctx);
         } else {
-            final ChannelPromise p = ctx.newPromise();
+            Promise<Void> p = ctx.newPromise();
             executor.execute(() -> {
-                ChannelFuture f = finishEncode(ctx(), p);
-                f.addListener(new ChannelPromiseNotifier(promise));
+                Future<Void> f = finishEncode(ctx());
+                f.cascadeTo(p);
             });
             return p;
         }
@@ -251,26 +251,26 @@ public class JdkZlibEncoder extends ZlibEncoder {
                     // no op
             }
         }
-        return ctx.alloc().heapBuffer(sizeEstimate);
+        return ctx.alloc().buffer(sizeEstimate);
     }
 
     @Override
-    public void close(final ChannelHandlerContext ctx, final ChannelPromise promise) throws Exception {
-        ChannelFuture f = finishEncode(ctx, ctx.newPromise());
-        f.addListener((ChannelFutureListener) f1 -> ctx.close(promise));
-
-        if (!f.isDone()) {
-            // Ensure the channel is closed even if the write operation completes in time.
-            ctx.executor().schedule(() -> {
-                ctx.close(promise);
-            }, 10, TimeUnit.SECONDS); // FIXME: Magic number
+    public Future<Void> close(final ChannelHandlerContext ctx) {
+        Future<Void> f = finishEncode(ctx);
+        if (f.isDone()) {
+            return ctx.close();
         }
+        Promise<Void> promise = ctx.newPromise();
+        f.addListener(f1 -> ctx.close().cascadeTo(promise));
+        // Ensure the channel is closed even if the write operation completes in time.
+        ctx.executor().schedule(() -> ctx.close().cascadeTo(promise),
+                10, TimeUnit.SECONDS); // FIXME: Magic number
+        return promise;
     }
 
-    private ChannelFuture finishEncode(final ChannelHandlerContext ctx, ChannelPromise promise) {
+    private Future<Void> finishEncode(final ChannelHandlerContext ctx) {
         if (finished) {
-            promise.setSuccess();
-            return promise;
+            return ctx.newSucceededFuture();
         }
 
         finished = true;
@@ -304,17 +304,32 @@ public class JdkZlibEncoder extends ZlibEncoder {
             footer.writeByte(uncBytes >>> 24);
         }
         deflater.end();
-        return ctx.writeAndFlush(footer, promise);
+        return ctx.writeAndFlush(footer);
     }
 
     private void deflate(ByteBuf out) {
-        int numBytes;
-        do {
-            int writerIndex = out.writerIndex();
-            numBytes = deflater.deflate(
-                    out.array(), out.arrayOffset() + writerIndex, out.writableBytes(), Deflater.SYNC_FLUSH);
-            out.writerIndex(writerIndex + numBytes);
-        } while (numBytes > 0);
+        if (out.hasArray()) {
+            int numBytes;
+            do {
+                int writerIndex = out.writerIndex();
+                numBytes = deflater.deflate(
+                        out.array(), out.arrayOffset() + writerIndex, out.writableBytes(), Deflater.SYNC_FLUSH);
+                out.writerIndex(writerIndex + numBytes);
+            } while (numBytes > 0);
+        } else if (out.nioBufferCount() == 1) {
+            // Use internalNioBuffer because nioBuffer is allowed to copy,
+            // which is fine for reading but not for writing.
+            int numBytes;
+            do {
+                int writerIndex = out.writerIndex();
+                ByteBuffer buffer = out.internalNioBuffer(writerIndex, out.writableBytes());
+                numBytes = deflater.deflate(buffer, Deflater.SYNC_FLUSH);
+                out.writerIndex(writerIndex + numBytes);
+            } while (numBytes > 0);
+        } else {
+            throw new IllegalArgumentException(
+                    "Don't know how to deflate buffer without array or NIO buffer count of 1: " + out);
+        }
     }
 
     @Override

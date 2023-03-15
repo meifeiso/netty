@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -25,7 +25,7 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_0;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -40,11 +40,11 @@ import java.util.concurrent.TimeUnit;
 public final class Http1RequestHandler extends Http2RequestHandler {
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
+    protected void messageReceived(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
         if (HttpUtil.is100ContinueExpected(request)) {
             ctx.write(new DefaultFullHttpResponse(HTTP_1_1, CONTINUE, Unpooled.EMPTY_BUFFER));
         }
-        super.channelRead0(ctx, request);
+        super.messageReceived(ctx, request);
     }
 
     @Override
@@ -60,7 +60,7 @@ public final class Http1RequestHandler extends Http2RequestHandler {
             } else {
                 // Tell the client we're going to close the connection.
                 response.headers().set(CONNECTION, CLOSE);
-                ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+                ctx.writeAndFlush(response).addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
             }
         }, latency, TimeUnit.MILLISECONDS);
     }

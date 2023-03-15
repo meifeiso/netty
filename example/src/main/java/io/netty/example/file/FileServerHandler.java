@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,7 +16,7 @@
 
 package io.netty.example.file;
 
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -33,7 +33,7 @@ public class FileServerHandler extends SimpleChannelInboundHandler<String> {
     }
 
     @Override
-    public void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
+    public void messageReceived(ChannelHandlerContext ctx, String msg) throws Exception {
         RandomAccessFile raf = null;
         long length = -1;
         try {
@@ -66,7 +66,8 @@ public class FileServerHandler extends SimpleChannelInboundHandler<String> {
         if (ctx.channel().isActive()) {
             ctx.writeAndFlush("ERR: " +
                     cause.getClass().getSimpleName() + ": " +
-                    cause.getMessage() + '\n').addListener(ChannelFutureListener.CLOSE);
+                    cause.getMessage() + '\n')
+               .addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
         }
     }
 }

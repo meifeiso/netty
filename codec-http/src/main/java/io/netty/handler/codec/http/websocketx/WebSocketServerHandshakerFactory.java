@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,16 +16,17 @@
 package io.netty.handler.codec.http.websocketx;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelPromise;
+
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
-import io.netty.util.internal.ObjectUtil;
+import io.netty.util.concurrent.Future;
+
+import java.util.Objects;
 
 /**
  * Auto-detects the version of the Web Socket protocol in use and creates a new proper
@@ -117,7 +118,7 @@ public class WebSocketServerHandshakerFactory {
             String webSocketURL, String subprotocols, WebSocketDecoderConfig decoderConfig) {
         this.webSocketURL = webSocketURL;
         this.subprotocols = subprotocols;
-        this.decoderConfig = ObjectUtil.checkNotNull(decoderConfig, "decoderConfig");
+        this.decoderConfig = Objects.requireNonNull(decoderConfig, "decoderConfig");
     }
 
     /**
@@ -162,19 +163,12 @@ public class WebSocketServerHandshakerFactory {
     /**
      * Return that we need cannot not support the web socket version
      */
-    public static ChannelFuture sendUnsupportedVersionResponse(Channel channel) {
-        return sendUnsupportedVersionResponse(channel, channel.newPromise());
-    }
-
-    /**
-     * Return that we need cannot not support the web socket version
-     */
-    public static ChannelFuture sendUnsupportedVersionResponse(Channel channel, ChannelPromise promise) {
+    public static Future<Void> sendUnsupportedVersionResponse(Channel channel) {
         HttpResponse res = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1,
                 HttpResponseStatus.UPGRADE_REQUIRED, channel.alloc().buffer(0));
         res.headers().set(HttpHeaderNames.SEC_WEBSOCKET_VERSION, WebSocketVersion.V13.toHttpHeaderValue());
         HttpUtil.setContentLength(res, 0);
-        return channel.writeAndFlush(res, promise);
+        return channel.writeAndFlush(res);
     }
 }

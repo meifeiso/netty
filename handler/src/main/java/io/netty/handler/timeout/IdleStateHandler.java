@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,21 +15,20 @@
  */
 package io.netty.handler.timeout;
 
-import static java.util.Objects.requireNonNull;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.Channel.Unsafe;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundBuffer;
-import io.netty.channel.ChannelPromise;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Triggers an {@link IdleStateEvent} when a {@link Channel} has not performed
@@ -100,13 +99,10 @@ import java.util.concurrent.TimeUnit;
 public class IdleStateHandler implements ChannelHandler {
     private static final long MIN_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(1);
 
-    // Not create a new ChannelFutureListener per write operation to reduce GC pressure.
-    private final ChannelFutureListener writeListener = new ChannelFutureListener() {
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-            lastWriteTime = ticksInNanos();
-            firstWriterIdleEvent = firstAllIdleEvent = true;
-        }
+    // Not create a new ChannelFutureListeners per write operation to reduce GC pressure.
+    private final FutureListener<Void> writeListener = future -> {
+        lastWriteTime = ticksInNanos();
+        firstWriterIdleEvent = firstAllIdleEvent = true;
     };
 
     private final boolean observeOutput;
@@ -297,13 +293,13 @@ public class IdleStateHandler implements ChannelHandler {
     }
 
     @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+    public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
+        Future<Void> future = ctx.write(msg);
         // Allow writing with void promise if handler is only configured for read timeout events.
         if (writerIdleTimeNanos > 0 || allIdleTimeNanos > 0) {
-            ctx.write(msg, promise.unvoid()).addListener(writeListener);
-        } else {
-            ctx.write(msg, promise);
+            future.addListener(writeListener);
         }
+        return future;
     }
 
     private void initialize(ChannelHandlerContext ctx) {
@@ -313,6 +309,8 @@ public class IdleStateHandler implements ChannelHandler {
         case 1:
         case 2:
             return;
+        default:
+             break;
         }
 
         state = 1;

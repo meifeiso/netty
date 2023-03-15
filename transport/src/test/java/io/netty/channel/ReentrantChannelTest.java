@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,13 +19,15 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.LoggingHandler.Event;
 import io.netty.channel.local.LocalAddress;
-
+import io.netty.util.concurrent.Future;
 import org.hamcrest.Matchers;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.nio.channels.ClosedChannelException;
 
-import static org.junit.Assert.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class ReentrantChannelTest extends BaseChannelTest {
 
@@ -35,13 +37,13 @@ public class ReentrantChannelTest extends BaseChannelTest {
         LocalAddress addr = new LocalAddress("testWritabilityChanged");
 
         ServerBootstrap sb = getLocalServerBootstrap();
-        sb.bind(addr).sync().channel();
+        sb.bind(addr).sync();
 
         Bootstrap cb = getLocalClientBootstrap();
 
         setInterest(Event.WRITE, Event.FLUSH, Event.WRITABILITY);
 
-        Channel clientChannel = cb.connect(addr).sync().channel();
+        Channel clientChannel = cb.connect(addr).get();
         clientChannel.config().setWriteBufferLowWaterMark(512);
         clientChannel.config().setWriteBufferHighWaterMark(1024);
 
@@ -74,7 +76,7 @@ public class ReentrantChannelTest extends BaseChannelTest {
         // the flush() is invoked from a non-I/O thread while the other are from
         // an I/O thread.
 
-        ChannelFuture future = clientChannel.write(createTestBuf(2000));
+        Future<Void> future = clientChannel.write(createTestBuf(2000));
 
         clientChannel.flush();
         future.sync();
@@ -107,13 +109,13 @@ public class ReentrantChannelTest extends BaseChannelTest {
         LocalAddress addr = new LocalAddress("testFlushInWritabilityChanged");
 
         ServerBootstrap sb = getLocalServerBootstrap();
-        sb.bind(addr).sync().channel();
+        sb.bind(addr).sync();
 
         Bootstrap cb = getLocalClientBootstrap();
 
         setInterest(Event.WRITE, Event.FLUSH, Event.WRITABILITY);
 
-        Channel clientChannel = cb.connect(addr).sync().channel();
+        Channel clientChannel = cb.connect(addr).get();
         clientChannel.config().setWriteBufferLowWaterMark(512);
         clientChannel.config().setWriteBufferHighWaterMark(1024);
 
@@ -157,13 +159,13 @@ public class ReentrantChannelTest extends BaseChannelTest {
         LocalAddress addr = new LocalAddress("testWriteFlushPingPong");
 
         ServerBootstrap sb = getLocalServerBootstrap();
-        sb.bind(addr).sync().channel();
+        sb.bind(addr).sync();
 
         Bootstrap cb = getLocalClientBootstrap();
 
         setInterest(Event.WRITE, Event.FLUSH, Event.CLOSE, Event.EXCEPTION);
 
-        Channel clientChannel = cb.connect(addr).sync().channel();
+        Channel clientChannel = cb.connect(addr).get();
 
         clientChannel.pipeline().addLast(new ChannelHandler() {
 
@@ -171,16 +173,16 @@ public class ReentrantChannelTest extends BaseChannelTest {
             int flushCount;
 
             @Override
-            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+            public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
                 if (writeCount < 5) {
                     writeCount++;
                     ctx.channel().flush();
                 }
-                ctx.write(msg,  promise);
+                return ctx.write(msg);
             }
 
             @Override
-            public void flush(ChannelHandlerContext ctx) throws Exception {
+            public void flush(ChannelHandlerContext ctx) {
                 if (flushCount < 5) {
                     flushCount++;
                     ctx.channel().write(createTestBuf(2000));
@@ -214,21 +216,21 @@ public class ReentrantChannelTest extends BaseChannelTest {
         LocalAddress addr = new LocalAddress("testCloseInFlush");
 
         ServerBootstrap sb = getLocalServerBootstrap();
-        sb.bind(addr).sync().channel();
+        sb.bind(addr).sync();
 
         Bootstrap cb = getLocalClientBootstrap();
 
         setInterest(Event.WRITE, Event.FLUSH, Event.CLOSE, Event.EXCEPTION);
 
-        Channel clientChannel = cb.connect(addr).sync().channel();
+        Channel clientChannel = cb.connect(addr).get();
 
         clientChannel.pipeline().addLast(new ChannelHandler() {
 
             @Override
-            public void write(final ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-                promise.addListener(future -> ctx.channel().close());
-                ctx.write(msg, promise);
+            public Future<Void> write(final ChannelHandlerContext ctx, Object msg) {
+                Future<Void> f = ctx.write(msg).addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
                 ctx.channel().flush();
+                return f;
             }
         });
 
@@ -244,19 +246,19 @@ public class ReentrantChannelTest extends BaseChannelTest {
         LocalAddress addr = new LocalAddress("testFlushFailure");
 
         ServerBootstrap sb = getLocalServerBootstrap();
-        sb.bind(addr).sync().channel();
+        sb.bind(addr).sync();
 
         Bootstrap cb = getLocalClientBootstrap();
 
         setInterest(Event.WRITE, Event.FLUSH, Event.CLOSE, Event.EXCEPTION);
 
-        Channel clientChannel = cb.connect(addr).sync().channel();
+        Channel clientChannel = cb.connect(addr).get();
 
         clientChannel.pipeline().addLast(new ChannelHandler() {
 
             @Override
-            public void flush(ChannelHandlerContext ctx) throws Exception {
-                throw new Exception("intentional failure");
+            public void flush(ChannelHandlerContext ctx) {
+                throw new IllegalStateException("intentional failure");
             }
 
         }, new ChannelHandler() {

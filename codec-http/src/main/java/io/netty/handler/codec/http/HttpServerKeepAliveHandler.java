@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,13 +15,16 @@
  */
 package io.netty.handler.codec.http;
 
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
+import io.netty.util.concurrent.Future;
 
-import static io.netty.handler.codec.http.HttpUtil.*;
+import static io.netty.handler.codec.http.HttpUtil.isContentLengthSet;
+import static io.netty.handler.codec.http.HttpUtil.isKeepAlive;
+import static io.netty.handler.codec.http.HttpUtil.isTransferEncodingChunked;
+import static io.netty.handler.codec.http.HttpUtil.setKeepAlive;
 
 /**
  * HttpServerKeepAliveHandler helps close persistent connections when appropriate.
@@ -65,7 +68,7 @@ public class HttpServerKeepAliveHandler implements ChannelHandler {
     }
 
     @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+    public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
         // modify message on way out to add headers if needed
         if (msg instanceof HttpResponse) {
             final HttpResponse response = (HttpResponse) msg;
@@ -81,10 +84,12 @@ public class HttpServerKeepAliveHandler implements ChannelHandler {
                 setKeepAlive(response, false);
             }
         }
-        if (msg instanceof LastHttpContent && !shouldKeepAlive()) {
-            promise = promise.unvoid().addListener(ChannelFutureListener.CLOSE);
+        boolean shouldClose = msg instanceof LastHttpContent && !shouldKeepAlive();
+        Future<Void> future = ctx.write(msg);
+        if (shouldClose) {
+            future.addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
         }
-        ctx.write(msg, promise);
+        return future;
     }
 
     private void trackResponse(HttpResponse response) {

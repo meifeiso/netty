@@ -5,7 +5,7 @@
  * 2.0 (the "License"); you may not use this file except in compliance with the
  * License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,29 +16,18 @@
 
 package io.netty.example.ocsp;
 
-import java.math.BigInteger;
-
-import javax.net.ssl.SSLSession;
-import javax.security.cert.X509Certificate;
-
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.MultithreadEventLoopGroup;
-import io.netty.channel.nio.NioHandler;
-import org.bouncycastle.asn1.ocsp.OCSPResponseStatus;
-import org.bouncycastle.cert.ocsp.BasicOCSPResp;
-import org.bouncycastle.cert.ocsp.CertificateStatus;
-import org.bouncycastle.cert.ocsp.OCSPResp;
-import org.bouncycastle.cert.ocsp.SingleResp;
-
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.MultithreadEventLoopGroup;
+import io.netty.channel.nio.NioHandler;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -57,10 +46,19 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.ocsp.OcspClientHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Promise;
+import org.bouncycastle.asn1.ocsp.OCSPResponseStatus;
+import org.bouncycastle.cert.ocsp.BasicOCSPResp;
+import org.bouncycastle.cert.ocsp.CertificateStatus;
+import org.bouncycastle.cert.ocsp.OCSPResp;
+import org.bouncycastle.cert.ocsp.SingleResp;
+
+import javax.net.ssl.SSLSession;
+import javax.security.cert.X509Certificate;
+import java.math.BigInteger;
 
 /**
- * This is a very simple example for a HTTPS client that uses OCSP stapling.
- * The client connects to a HTTPS server that has OCSP stapling enabled and
+ * This is a very simple example for an HTTPS client that uses OCSP stapling.
+ * The client connects to an HTTPS server that has OCSP stapling enabled and
  * then uses BC to parse and validate it.
  */
 public class OcspClientExample {
@@ -99,9 +97,7 @@ public class OcspClientExample {
                         .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5 * 1000)
                         .handler(newClientHandler(context, host, promise));
 
-                Channel channel = bootstrap.connect(host, 443)
-                        .syncUninterruptibly()
-                        .channel();
+                Channel channel = bootstrap.connect(host, 443).get();
 
                 try {
                     FullHttpResponse response = promise.get();
@@ -153,7 +149,7 @@ public class OcspClientExample {
         };
     }
 
-    private static class HttpClientHandler implements ChannelInboundHandler {
+    private static class HttpClientHandler implements ChannelHandler {
 
         private final String host;
 
@@ -171,7 +167,7 @@ public class OcspClientExample {
             request.headers().set(HttpHeaderNames.HOST, host);
             request.headers().set(HttpHeaderNames.USER_AGENT, "netty-ocsp-example/1.0");
 
-            ctx.writeAndFlush(request).addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
+            ctx.writeAndFlush(request).addListener(ctx.channel(), ChannelFutureListeners.FIRE_EXCEPTION_ON_FAILURE);
 
             ctx.fireChannelActive();
         }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,6 +15,8 @@
  */
 package io.netty.channel;
 
+import io.netty.util.concurrent.Promise;
+
 import static java.util.Objects.requireNonNull;
 
 import java.net.SocketAddress;
@@ -23,9 +25,9 @@ import java.net.SocketAddress;
  * A skeletal server-side {@link Channel} implementation.  A server-side
  * {@link Channel} does not allow the following operations:
  * <ul>
- * <li>{@link #connect(SocketAddress, ChannelPromise)}</li>
- * <li>{@link #disconnect(ChannelPromise)}</li>
- * <li>{@link #write(Object, ChannelPromise)}</li>
+ * <li>{@link #connect(SocketAddress, Promise)}</li>
+ * <li>{@link #disconnect(Promise)}</li>
+ * <li>{@link #write(Object, Promise)}</li>
  * <li>{@link #flush()}</li>
  * <li>and the shortcut methods which calls the methods mentioned above
  * </ul>
@@ -85,7 +87,7 @@ public abstract class AbstractServerChannel extends AbstractChannel implements S
 
     private final class DefaultServerUnsafe extends AbstractUnsafe {
         @Override
-        public void connect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
+        public void connect(SocketAddress remoteAddress, SocketAddress localAddress, Promise<Void> promise) {
             safeSetFailure(promise, new UnsupportedOperationException());
         }
     }

@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -15,11 +15,10 @@
 package io.netty.microbench.channel;
 
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.ReferenceCounted;
+import io.netty.util.concurrent.Future;
 
 public abstract class EmbeddedChannelWriteReleaseHandlerContext extends EmbeddedChannelHandlerContext {
     protected EmbeddedChannelWriteReleaseHandlerContext(ByteBufAllocator alloc, ChannelHandler handler) {
@@ -35,44 +34,30 @@ public abstract class EmbeddedChannelWriteReleaseHandlerContext extends Embedded
     protected abstract void handleException(Throwable t);
 
     @Override
-    public final ChannelFuture write(Object msg) {
-        return write(msg, newPromise());
-    }
-
-    @Override
-    public final ChannelFuture write(Object msg, ChannelPromise promise) {
+    public final Future<Void> write(Object msg) {
         try {
             if (msg instanceof ReferenceCounted) {
                 ((ReferenceCounted) msg).release();
-                promise.setSuccess();
-            } else {
-                channel().write(msg, promise);
+                return channel().newSucceededFuture();
             }
+            return channel().write(msg);
         } catch (Exception e) {
-            promise.setFailure(e);
             handleException(e);
+            return channel().newFailedFuture(e);
         }
-        return promise;
     }
 
     @Override
-    public final ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
+    public final Future<Void> writeAndFlush(Object msg) {
         try {
             if (msg instanceof ReferenceCounted) {
                 ((ReferenceCounted) msg).release();
-                promise.setSuccess();
-            } else {
-                channel().writeAndFlush(msg, promise);
+                return channel().newSucceededFuture();
             }
+            return channel().writeAndFlush(msg);
         } catch (Exception e) {
-            promise.setFailure(e);
             handleException(e);
+            return channel().newFailedFuture(e);
         }
-        return promise;
-    }
-
-    @Override
-    public final ChannelFuture writeAndFlush(Object msg) {
-        return writeAndFlush(msg, newPromise());
     }
 }

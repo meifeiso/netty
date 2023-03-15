@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,7 +16,7 @@
 package io.netty.example.sctp.multihoming;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.ChannelFuture;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.MultithreadEventLoopGroup;
@@ -25,6 +25,7 @@ import io.netty.channel.sctp.SctpChannel;
 import io.netty.channel.sctp.SctpChannelOption;
 import io.netty.channel.sctp.nio.NioSctpChannel;
 import io.netty.example.sctp.SctpEchoClientHandler;
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.SocketUtils;
 
 import java.net.InetAddress;
@@ -66,10 +67,10 @@ public final class SctpMultiHomingEchoClient {
             InetSocketAddress remoteAddress = SocketUtils.socketAddress(SERVER_REMOTE_HOST, SERVER_REMOTE_PORT);
 
             // Bind the client channel.
-            ChannelFuture bindFuture = b.bind(localAddress).sync();
+            Future<Channel> bindFuture = b.bind(localAddress);
 
             // Get the underlying sctp channel
-            SctpChannel channel = (SctpChannel) bindFuture.channel();
+            SctpChannel channel = (SctpChannel) bindFuture.get();
 
             // Bind the secondary address.
             // Please note that, bindAddress in the client channel should be done before connecting if you have not
@@ -77,10 +78,10 @@ public final class SctpMultiHomingEchoClient {
             channel.bindAddress(localSecondaryAddress).sync();
 
             // Finish connect
-            ChannelFuture connectFuture = channel.connect(remoteAddress).sync();
+            Future<Void> connectFuture = channel.connect(remoteAddress).sync();
 
             // Wait until the connection is closed.
-            connectFuture.channel().closeFuture().sync();
+            channel.closeFuture().sync();
         } finally {
             // Shut down the event loop to terminate all threads.
             group.shutdownGracefully();

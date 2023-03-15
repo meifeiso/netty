@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,19 +23,23 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.SimpleChannelInboundHandler;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.channel.ChannelOption.AUTO_READ;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class SocketDataReadInitialStateTest extends AbstractSocketTest {
-    @Test(timeout = 10000)
-    public void testAutoReadOffNoDataReadUntilReadCalled() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testAutoReadOffNoDataReadUntilReadCalled(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testAutoReadOffNoDataReadUntilReadCalled);
     }
 
     public void testAutoReadOffNoDataReadUntilReadCalled(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -71,7 +75,7 @@ public class SocketDataReadInitialStateTest extends AbstractSocketTest {
                     serverConnectedChannelRef.set(ch);
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
+                        protected void messageReceived(ChannelHandlerContext ctx, ByteBuf msg) {
                             ctx.writeAndFlush(msg.retainedDuplicate());
                             serverReadLatch.countDown();
                         }
@@ -85,15 +89,15 @@ public class SocketDataReadInitialStateTest extends AbstractSocketTest {
                 protected void initChannel(Channel ch) {
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<Object>() {
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
+                        protected void messageReceived(ChannelHandlerContext ctx, Object msg) {
                             clientReadLatch.countDown();
                         }
                     });
                 }
             });
 
-            serverChannel = sb.bind().sync().channel();
-            clientChannel = cb.connect(serverChannel.localAddress()).sync().channel();
+            serverChannel = sb.bind().get();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
             clientChannel.writeAndFlush(clientChannel.alloc().buffer().writeZero(1)).syncUninterruptibly();
 
             // The acceptor shouldn't read any data until we call read() below, but give it some time to see if it will.
@@ -127,9 +131,10 @@ public class SocketDataReadInitialStateTest extends AbstractSocketTest {
         }
     }
 
-    @Test(timeout = 10000)
-    public void testAutoReadOnDataReadImmediately() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testAutoReadOnDataReadImmediately(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testAutoReadOnDataReadImmediately);
     }
 
     public void testAutoReadOnDataReadImmediately(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -147,7 +152,7 @@ public class SocketDataReadInitialStateTest extends AbstractSocketTest {
                 protected void initChannel(Channel ch) {
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
+                        protected void messageReceived(ChannelHandlerContext ctx, ByteBuf msg) {
                             ctx.writeAndFlush(msg.retainedDuplicate());
                             serverReadLatch.countDown();
                         }
@@ -160,15 +165,15 @@ public class SocketDataReadInitialStateTest extends AbstractSocketTest {
                 protected void initChannel(Channel ch) {
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<Object>() {
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
+                        protected void messageReceived(ChannelHandlerContext ctx, Object msg) {
                             clientReadLatch.countDown();
                         }
                     });
                 }
             });
 
-            serverChannel = sb.bind().sync().channel();
-            clientChannel = cb.connect(serverChannel.localAddress()).sync().channel();
+            serverChannel = sb.bind().get();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
             clientChannel.writeAndFlush(clientChannel.alloc().buffer().writeZero(1)).syncUninterruptibly();
             serverReadLatch.await();
             clientReadLatch.await();

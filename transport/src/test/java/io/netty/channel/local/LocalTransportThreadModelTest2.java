@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,17 +18,19 @@ package io.netty.channel.local;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.MultithreadEventLoopGroup;
 import io.netty.util.ReferenceCountUtil;
-import org.junit.Test;
+import io.netty.util.concurrent.Future;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class LocalTransportThreadModelTest2 {
 
@@ -36,8 +38,9 @@ public class LocalTransportThreadModelTest2 {
 
     static final int messageCountPerRun = 4;
 
-    @Test(timeout = 15000)
-    public void testSocketReuse() throws InterruptedException {
+    @Test
+    @Timeout(value = 15000, unit = TimeUnit.MILLISECONDS)
+    public void testSocketReuse() throws Exception {
         ServerBootstrap serverBootstrap = new ServerBootstrap();
         LocalHandler serverHandler = new LocalHandler("SERVER");
         serverBootstrap
@@ -57,7 +60,7 @@ public class LocalTransportThreadModelTest2 {
 
         int count = 100;
         for (int i = 1; i < count + 1; i ++) {
-            Channel ch = clientBootstrap.connect().sync().channel();
+            Channel ch = clientBootstrap.connect().get();
 
             // SPIN until we get what we are looking for.
             int target = i * messageCountPerRun;
@@ -73,7 +76,7 @@ public class LocalTransportThreadModelTest2 {
 
     public void close(final Channel localChannel, final LocalHandler localRegistrationHandler) {
         // we want to make sure we actually shutdown IN the event loop
-        if (localChannel.eventLoop().inEventLoop()) {
+        if (localChannel.executor().inEventLoop()) {
             // Wait until all messages are flushed before closing the channel.
             if (localRegistrationHandler.lastWriteFuture != null) {
                 localRegistrationHandler.lastWriteFuture.awaitUninterruptibly();
@@ -83,17 +86,17 @@ public class LocalTransportThreadModelTest2 {
             return;
         }
 
-        localChannel.eventLoop().execute(() -> close(localChannel, localRegistrationHandler));
+        localChannel.executor().execute(() -> close(localChannel, localRegistrationHandler));
 
         // Wait until the connection is closed or the connection attempt fails.
         localChannel.closeFuture().awaitUninterruptibly();
     }
 
     @Sharable
-    static class LocalHandler implements ChannelInboundHandler {
+    static class LocalHandler implements ChannelHandler {
         private final String name;
 
-        public volatile ChannelFuture lastWriteFuture;
+        public volatile Future<Void> lastWriteFuture;
 
         public final AtomicInteger count = new AtomicInteger(0);
 

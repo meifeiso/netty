@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,19 +15,18 @@
  */
 package io.netty.handler.timeout;
 
-import static java.util.Objects.requireNonNull;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPromise;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Raises a {@link WriteTimeoutException} when a write operation cannot finish in a certain period of time.
@@ -104,19 +103,21 @@ public class WriteTimeoutHandler implements ChannelHandler {
     }
 
     @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+    public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
+        Future<Void> f = ctx.write(msg);
         if (timeoutNanos > 0) {
-            promise = promise.unvoid();
-            scheduleTimeout(ctx, promise);
+            scheduleTimeout(ctx, f);
         }
-        ctx.write(msg, promise);
+        return f;
     }
 
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+        assert ctx.executor().inEventLoop();
         WriteTimeoutTask task = lastTask;
         lastTask = null;
         while (task != null) {
+            assert task.ctx.executor().inEventLoop();
             task.scheduledFuture.cancel(false);
             WriteTimeoutTask prev = task.prev;
             task.prev = null;
@@ -125,20 +126,21 @@ public class WriteTimeoutHandler implements ChannelHandler {
         }
     }
 
-    private void scheduleTimeout(final ChannelHandlerContext ctx, final ChannelPromise promise) {
+    private void scheduleTimeout(final ChannelHandlerContext ctx, final Future<Void> future) {
         // Schedule a timeout.
-        final WriteTimeoutTask task = new WriteTimeoutTask(ctx, promise);
+        final WriteTimeoutTask task = new WriteTimeoutTask(ctx, future);
         task.scheduledFuture = ctx.executor().schedule(task, timeoutNanos, TimeUnit.NANOSECONDS);
 
         if (!task.scheduledFuture.isDone()) {
             addWriteTimeoutTask(task);
 
             // Cancel the scheduled timeout if the flush promise is complete.
-            promise.addListener(task);
+            future.addListener(task);
         }
     }
 
     private void addWriteTimeoutTask(WriteTimeoutTask task) {
+        assert task.ctx.executor().inEventLoop();
         if (lastTask != null) {
             lastTask.next = task;
             task.prev = lastTask;
@@ -147,6 +149,7 @@ public class WriteTimeoutHandler implements ChannelHandler {
     }
 
     private void removeWriteTimeoutTask(WriteTimeoutTask task) {
+        assert task.ctx.executor().inEventLoop();
         if (task == lastTask) {
             // task is the tail of list
             assert task.next == null;
@@ -179,20 +182,19 @@ public class WriteTimeoutHandler implements ChannelHandler {
         }
     }
 
-    private final class WriteTimeoutTask implements Runnable, ChannelFutureListener {
+    private final class WriteTimeoutTask implements Runnable, FutureListener<Void> {
 
         private final ChannelHandlerContext ctx;
-        private final ChannelPromise promise;
+        private final Future<Void> future;
 
         // WriteTimeoutTask is also a node of a doubly-linked list
         WriteTimeoutTask prev;
         WriteTimeoutTask next;
 
         ScheduledFuture<?> scheduledFuture;
-
-        WriteTimeoutTask(ChannelHandlerContext ctx, ChannelPromise promise) {
+        WriteTimeoutTask(ChannelHandlerContext ctx, Future<Void> future) {
             this.ctx = ctx;
-            this.promise = promise;
+            this.future = future;
         }
 
         @Override
@@ -200,7 +202,7 @@ public class WriteTimeoutHandler implements ChannelHandler {
             // Was not written yet so issue a write timeout
             // The promise itself will be failed with a ClosedChannelException once the close() was issued
             // See https://github.com/netty/netty/issues/2159
-            if (!promise.isDone()) {
+            if (!future.isDone()) {
                 try {
                     writeTimedOut(ctx);
                 } catch (Throwable t) {
@@ -211,10 +213,22 @@ public class WriteTimeoutHandler implements ChannelHandler {
         }
 
         @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
+        public void operationComplete(Future<? extends Void> future) throws Exception {
             // scheduledFuture has already be set when reaching here
             scheduledFuture.cancel(false);
-            removeWriteTimeoutTask(this);
+
+            // Check if its safe to modify the "doubly-linked-list" that we maintain. If its not we will schedule the
+            // modification so its picked up by the executor..
+            if (ctx.executor().inEventLoop()) {
+                removeWriteTimeoutTask(this);
+            } else {
+                // So let's just pass outself to the executor which will then take care of remove this task
+                // from the doubly-linked list. Schedule ourself is fine as the promise itself is done.
+                //
+                // This fixes https://github.com/netty/netty/issues/11053
+                assert future.isDone();
+                ctx.executor().execute(this);
+            }
         }
     }
 }

@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -16,13 +16,11 @@
 package io.netty.handler.codec.http2;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2CodecUtil.SimpleChannelPromiseAggregator;
 import io.netty.handler.codec.http2.Http2FrameWriter.Configuration;
 import io.netty.handler.codec.http2.Http2HeadersEncoder.SensitivityDetector;
-import io.netty.util.internal.PlatformDependent;
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.UnstableApi;
 
 import static io.netty.buffer.Unpooled.directBuffer;
@@ -133,10 +131,10 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
     public void close() { }
 
     @Override
-    public ChannelFuture writeData(ChannelHandlerContext ctx, int streamId, ByteBuf data,
-            int padding, boolean endStream, ChannelPromise promise) {
+    public Future<Void> writeData(ChannelHandlerContext ctx, int streamId, ByteBuf data,
+                                  int padding, boolean endStream) {
         final SimpleChannelPromiseAggregator promiseAggregator =
-                new SimpleChannelPromiseAggregator(promise, ctx.channel(), ctx.executor());
+                new SimpleChannelPromiseAggregator(ctx.newPromise(), ctx.executor());
         ByteBuf frameHeader = null;
         try {
             verifyStreamId(streamId, STREAM_ID);
@@ -152,10 +150,10 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
                 writeFrameHeaderInternal(frameHeader, maxFrameSize, DATA, flags, streamId);
                 do {
                     // Write the header.
-                    ctx.write(frameHeader.retainedSlice(), promiseAggregator.newPromise());
+                    ctx.write(frameHeader.retainedSlice()).cascadeTo(promiseAggregator.newPromise());
 
                     // Write the payload.
-                    ctx.write(data.readRetainedSlice(maxFrameSize), promiseAggregator.newPromise());
+                    ctx.write(data.readRetainedSlice(maxFrameSize)).cascadeTo(promiseAggregator.newPromise());
 
                     remainingData -= maxFrameSize;
                     // Stop iterating if remainingData == maxFrameSize so we can take care of reference counts below.
@@ -171,12 +169,12 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
                 ByteBuf frameHeader2 = ctx.alloc().buffer(FRAME_HEADER_LENGTH);
                 flags.endOfStream(endStream);
                 writeFrameHeaderInternal(frameHeader2, remainingData, DATA, flags, streamId);
-                ctx.write(frameHeader2, promiseAggregator.newPromise());
+                ctx.write(frameHeader2).cascadeTo(promiseAggregator.newPromise());
 
                 // Write the payload.
                 ByteBuf lastFrame = data.readSlice(remainingData);
                 data = null;
-                ctx.write(lastFrame, promiseAggregator.newPromise());
+                ctx.write(lastFrame).cascadeTo(promiseAggregator.newPromise());
             } else {
                 if (remainingData != maxFrameSize) {
                     if (frameHeader != null) {
@@ -194,17 +192,17 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
                         lastFrame = frameHeader.slice();
                         frameHeader = null;
                     }
-                    ctx.write(lastFrame, promiseAggregator.newPromise());
+                    ctx.write(lastFrame).cascadeTo(promiseAggregator.newPromise());
 
                     // Write the payload.
                     lastFrame = data.readableBytes() != maxFrameSize ? data.readSlice(maxFrameSize) : data;
                     data = null;
-                    ctx.write(lastFrame, promiseAggregator.newPromise());
+                    ctx.write(lastFrame).cascadeTo(promiseAggregator.newPromise());
                 }
 
                 do {
                     int frameDataBytes = min(remainingData, maxFrameSize);
-                    int framePaddingBytes = min(padding, max(0, (maxFrameSize - 1) - frameDataBytes));
+                    int framePaddingBytes = min(padding, max(0, maxFrameSize - 1 - frameDataBytes));
 
                     // Decrement the remaining counters.
                     padding -= framePaddingBytes;
@@ -216,22 +214,23 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
                     flags.paddingPresent(framePaddingBytes > 0);
                     writeFrameHeaderInternal(frameHeader2, framePaddingBytes + frameDataBytes, DATA, flags, streamId);
                     writePaddingLength(frameHeader2, framePaddingBytes);
-                    ctx.write(frameHeader2, promiseAggregator.newPromise());
+                    ctx.write(frameHeader2).cascadeTo(promiseAggregator.newPromise());
 
                     // Write the payload.
-                    if (frameDataBytes != 0) {
+                    if (frameDataBytes != 0 && data != null) { // Make sure Data is not null
                         if (remainingData == 0) {
                             ByteBuf lastFrame = data.readSlice(frameDataBytes);
                             data = null;
-                            ctx.write(lastFrame, promiseAggregator.newPromise());
+                            ctx.write(lastFrame).cascadeTo(promiseAggregator.newPromise());
                         } else {
-                            ctx.write(data.readRetainedSlice(frameDataBytes), promiseAggregator.newPromise());
+                            ctx.write(data.readRetainedSlice(frameDataBytes))
+                                    .cascadeTo(promiseAggregator.newPromise());
                         }
                     }
                     // Write the frame padding.
                     if (paddingBytes(framePaddingBytes) > 0) {
-                        ctx.write(ZERO_BUFFER.slice(0, paddingBytes(framePaddingBytes)),
-                                  promiseAggregator.newPromise());
+                        ctx.write(ZERO_BUFFER.slice(0, paddingBytes(framePaddingBytes)))
+                                .cascadeTo(promiseAggregator.newPromise());
                     }
                 } while (remainingData != 0 || padding != 0);
             }
@@ -242,7 +241,9 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
             // Use a try/finally here in case the data has been released before calling this method. This is not
             // necessary above because we internally allocate frameHeader.
             try {
-                if (data != null) {
+                if (data != null &&
+                        // Check if the data was released already.
+                        data.refCnt() > 0) {
                     data.release();
                 }
             } finally {
@@ -255,26 +256,26 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
     }
 
     @Override
-    public ChannelFuture writeHeaders(ChannelHandlerContext ctx, int streamId,
-            Http2Headers headers, int padding, boolean endStream, ChannelPromise promise) {
+    public Future<Void> writeHeaders(ChannelHandlerContext ctx, int streamId,
+                                     Http2Headers headers, int padding, boolean endStream) {
         return writeHeadersInternal(ctx, streamId, headers, padding, endStream,
-                false, 0, (short) 0, false, promise);
+                false, 0, (short) 0, false);
     }
 
     @Override
-    public ChannelFuture writeHeaders(ChannelHandlerContext ctx, int streamId,
-            Http2Headers headers, int streamDependency, short weight, boolean exclusive,
-            int padding, boolean endStream, ChannelPromise promise) {
+    public Future<Void> writeHeaders(ChannelHandlerContext ctx, int streamId,
+                                     Http2Headers headers, int streamDependency, short weight, boolean exclusive,
+                                     int padding, boolean endStream) {
         return writeHeadersInternal(ctx, streamId, headers, padding, endStream,
-                true, streamDependency, weight, exclusive, promise);
+                true, streamDependency, weight, exclusive);
     }
 
     @Override
-    public ChannelFuture writePriority(ChannelHandlerContext ctx, int streamId,
-            int streamDependency, short weight, boolean exclusive, ChannelPromise promise) {
+    public Future<Void> writePriority(ChannelHandlerContext ctx, int streamId,
+                                      int streamDependency, short weight, boolean exclusive) {
         try {
             verifyStreamId(streamId, STREAM_ID);
-            verifyStreamId(streamDependency, STREAM_DEPENDENCY);
+            verifyStreamOrConnectionId(streamDependency, STREAM_DEPENDENCY);
             verifyWeight(weight);
 
             ByteBuf buf = ctx.alloc().buffer(PRIORITY_FRAME_LENGTH);
@@ -282,15 +283,14 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
             buf.writeInt(exclusive ? (int) (0x80000000L | streamDependency) : streamDependency);
             // Adjust the weight so that it fits into a single byte on the wire.
             buf.writeByte(weight - 1);
-            return ctx.write(buf, promise);
+            return ctx.write(buf);
         } catch (Throwable t) {
-            return promise.setFailure(t);
+            return ctx.newFailedFuture(t);
         }
     }
 
     @Override
-    public ChannelFuture writeRstStream(ChannelHandlerContext ctx, int streamId, long errorCode,
-            ChannelPromise promise) {
+    public Future<Void> writeRstStream(ChannelHandlerContext ctx, int streamId, long errorCode) {
         try {
             verifyStreamId(streamId, STREAM_ID);
             verifyErrorCode(errorCode);
@@ -298,58 +298,57 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
             ByteBuf buf = ctx.alloc().buffer(RST_STREAM_FRAME_LENGTH);
             writeFrameHeaderInternal(buf, INT_FIELD_LENGTH, RST_STREAM, new Http2Flags(), streamId);
             buf.writeInt((int) errorCode);
-            return ctx.write(buf, promise);
+            return ctx.write(buf);
         } catch (Throwable t) {
-            return promise.setFailure(t);
+            return ctx.newFailedFuture(t);
         }
     }
 
     @Override
-    public ChannelFuture writeSettings(ChannelHandlerContext ctx, Http2Settings settings,
-            ChannelPromise promise) {
+    public Future<Void> writeSettings(ChannelHandlerContext ctx, Http2Settings settings) {
         try {
             requireNonNull(settings, "settings");
             int payloadLength = SETTING_ENTRY_LENGTH * settings.size();
-            ByteBuf buf = ctx.alloc().buffer(FRAME_HEADER_LENGTH + settings.size() * SETTING_ENTRY_LENGTH);
+            ByteBuf buf = ctx.alloc().buffer(FRAME_HEADER_LENGTH + payloadLength);
             writeFrameHeaderInternal(buf, payloadLength, SETTINGS, new Http2Flags(), 0);
             for (Http2Settings.PrimitiveEntry<Long> entry : settings.entries()) {
                 buf.writeChar(entry.key());
                 buf.writeInt(entry.value().intValue());
             }
-            return ctx.write(buf, promise);
+            return ctx.write(buf);
         } catch (Throwable t) {
-            return promise.setFailure(t);
+            return ctx.newFailedFuture(t);
         }
     }
 
     @Override
-    public ChannelFuture writeSettingsAck(ChannelHandlerContext ctx, ChannelPromise promise) {
+    public Future<Void> writeSettingsAck(ChannelHandlerContext ctx) {
         try {
             ByteBuf buf = ctx.alloc().buffer(FRAME_HEADER_LENGTH);
             writeFrameHeaderInternal(buf, 0, SETTINGS, new Http2Flags().ack(true), 0);
-            return ctx.write(buf, promise);
+            return ctx.write(buf);
         } catch (Throwable t) {
-            return promise.setFailure(t);
+            return ctx.newFailedFuture(t);
         }
     }
 
     @Override
-    public ChannelFuture writePing(ChannelHandlerContext ctx, boolean ack, long data, ChannelPromise promise) {
+    public Future<Void> writePing(ChannelHandlerContext ctx, boolean ack, long data) {
         Http2Flags flags = ack ? new Http2Flags().ack(true) : new Http2Flags();
         ByteBuf buf = ctx.alloc().buffer(FRAME_HEADER_LENGTH + PING_FRAME_PAYLOAD_LENGTH);
         // Assume nothing below will throw until buf is written. That way we don't have to take care of ownership
         // in the catch block.
         writeFrameHeaderInternal(buf, PING_FRAME_PAYLOAD_LENGTH, PING, flags, 0);
         buf.writeLong(data);
-        return ctx.write(buf, promise);
+        return ctx.write(buf);
     }
 
     @Override
-    public ChannelFuture writePushPromise(ChannelHandlerContext ctx, int streamId,
-            int promisedStreamId, Http2Headers headers, int padding, ChannelPromise promise) {
+    public Future<Void> writePushPromise(ChannelHandlerContext ctx, int streamId, int promisedStreamId,
+                                         Http2Headers headers, int padding) {
         ByteBuf headerBlock = null;
         SimpleChannelPromiseAggregator promiseAggregator =
-                new SimpleChannelPromiseAggregator(promise, ctx.channel(), ctx.executor());
+                new SimpleChannelPromiseAggregator(ctx.newPromise(), ctx.executor());
         try {
             verifyStreamId(streamId, STREAM_ID);
             verifyStreamId(promisedStreamId, "Promised Stream ID");
@@ -375,25 +374,25 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
 
             // Write out the promised stream ID.
             buf.writeInt(promisedStreamId);
-            ctx.write(buf, promiseAggregator.newPromise());
+            ctx.write(buf).cascadeTo(promiseAggregator.newPromise());
 
             // Write the first fragment.
-            ctx.write(fragment, promiseAggregator.newPromise());
+            ctx.write(fragment).cascadeTo(promiseAggregator.newPromise());
 
             // Write out the padding, if any.
             if (paddingBytes(padding) > 0) {
-                ctx.write(ZERO_BUFFER.slice(0, paddingBytes(padding)), promiseAggregator.newPromise());
+                ctx.write(ZERO_BUFFER.slice(0, paddingBytes(padding))).cascadeTo(promiseAggregator.newPromise());
             }
 
             if (!flags.endOfHeaders()) {
-                writeContinuationFrames(ctx, streamId, headerBlock, padding, promiseAggregator);
+                writeContinuationFrames(ctx, streamId, headerBlock, promiseAggregator);
             }
         } catch (Http2Exception e) {
             promiseAggregator.setFailure(e);
         } catch (Throwable t) {
             promiseAggregator.setFailure(t);
             promiseAggregator.doneAllocatingPromises();
-            PlatformDependent.throwException(t);
+            throw t;
         } finally {
             if (headerBlock != null) {
                 headerBlock.release();
@@ -403,10 +402,10 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
     }
 
     @Override
-    public ChannelFuture writeGoAway(ChannelHandlerContext ctx, int lastStreamId, long errorCode,
-            ByteBuf debugData, ChannelPromise promise) {
+    public Future<Void> writeGoAway(ChannelHandlerContext ctx, int lastStreamId, long errorCode,
+            ByteBuf debugData) {
         SimpleChannelPromiseAggregator promiseAggregator =
-                new SimpleChannelPromiseAggregator(promise, ctx.channel(), ctx.executor());
+                new SimpleChannelPromiseAggregator(ctx.newPromise(), ctx.executor());
         try {
             verifyStreamOrConnectionId(lastStreamId, "Last Stream ID");
             verifyErrorCode(errorCode);
@@ -418,7 +417,7 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
             writeFrameHeaderInternal(buf, payloadLength, GO_AWAY, new Http2Flags(), 0);
             buf.writeInt(lastStreamId);
             buf.writeInt((int) errorCode);
-            ctx.write(buf, promiseAggregator.newPromise());
+            ctx.write(buf).cascadeTo(promiseAggregator.newPromise());
         } catch (Throwable t) {
             try {
                 debugData.release();
@@ -430,7 +429,7 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
         }
 
         try {
-            ctx.write(debugData, promiseAggregator.newPromise());
+            ctx.write(debugData).cascadeTo(promiseAggregator.newPromise());
         } catch (Throwable t) {
             promiseAggregator.setFailure(t);
         }
@@ -438,8 +437,8 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
     }
 
     @Override
-    public ChannelFuture writeWindowUpdate(ChannelHandlerContext ctx, int streamId,
-            int windowSizeIncrement, ChannelPromise promise) {
+    public Future<Void> writeWindowUpdate(ChannelHandlerContext ctx, int streamId,
+                                          int windowSizeIncrement) {
         try {
             verifyStreamOrConnectionId(streamId, STREAM_ID);
             verifyWindowSizeIncrement(windowSizeIncrement);
@@ -447,24 +446,24 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
             ByteBuf buf = ctx.alloc().buffer(WINDOW_UPDATE_FRAME_LENGTH);
             writeFrameHeaderInternal(buf, INT_FIELD_LENGTH, WINDOW_UPDATE, new Http2Flags(), streamId);
             buf.writeInt(windowSizeIncrement);
-            return ctx.write(buf, promise);
+            return ctx.write(buf);
         } catch (Throwable t) {
-            return promise.setFailure(t);
+            return ctx.newFailedFuture(t);
         }
     }
 
     @Override
-    public ChannelFuture writeFrame(ChannelHandlerContext ctx, byte frameType, int streamId,
-            Http2Flags flags, ByteBuf payload, ChannelPromise promise) {
+    public Future<Void> writeFrame(ChannelHandlerContext ctx, byte frameType, int streamId,
+                                   Http2Flags flags, ByteBuf payload) {
         SimpleChannelPromiseAggregator promiseAggregator =
-                new SimpleChannelPromiseAggregator(promise, ctx.channel(), ctx.executor());
+                new SimpleChannelPromiseAggregator(ctx.newPromise(), ctx.executor());
         try {
             verifyStreamOrConnectionId(streamId, STREAM_ID);
             ByteBuf buf = ctx.alloc().buffer(FRAME_HEADER_LENGTH);
             // Assume nothing below will throw until buf is written. That way we don't have to take care of ownership
             // in the catch block.
             writeFrameHeaderInternal(buf, payload.readableBytes(), frameType, flags, streamId);
-            ctx.write(buf, promiseAggregator.newPromise());
+            ctx.write(buf).cascadeTo(promiseAggregator.newPromise());
         } catch (Throwable t) {
             try {
                 payload.release();
@@ -475,19 +474,19 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
             return promiseAggregator;
         }
         try {
-            ctx.write(payload, promiseAggregator.newPromise());
+            ctx.write(payload).cascadeTo(promiseAggregator.newPromise());
         } catch (Throwable t) {
             promiseAggregator.setFailure(t);
         }
         return promiseAggregator.doneAllocatingPromises();
     }
 
-    private ChannelFuture writeHeadersInternal(ChannelHandlerContext ctx,
+    private Future<Void> writeHeadersInternal(ChannelHandlerContext ctx,
             int streamId, Http2Headers headers, int padding, boolean endStream,
-            boolean hasPriority, int streamDependency, short weight, boolean exclusive, ChannelPromise promise) {
+            boolean hasPriority, int streamDependency, short weight, boolean exclusive) {
         ByteBuf headerBlock = null;
         SimpleChannelPromiseAggregator promiseAggregator =
-                new SimpleChannelPromiseAggregator(promise, ctx.channel(), ctx.executor());
+                new SimpleChannelPromiseAggregator(ctx.newPromise(), ctx.executor());
         try {
             verifyStreamId(streamId, STREAM_ID);
             if (hasPriority) {
@@ -522,25 +521,26 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
                 // Adjust the weight so that it fits into a single byte on the wire.
                 buf.writeByte(weight - 1);
             }
-            ctx.write(buf, promiseAggregator.newPromise());
+            ctx.write(buf).cascadeTo(promiseAggregator.newPromise());
 
             // Write the first fragment.
-            ctx.write(fragment, promiseAggregator.newPromise());
+            ctx.write(fragment).cascadeTo(promiseAggregator.newPromise());
 
             // Write out the padding, if any.
             if (paddingBytes(padding) > 0) {
-                ctx.write(ZERO_BUFFER.slice(0, paddingBytes(padding)), promiseAggregator.newPromise());
+                ctx.write(ZERO_BUFFER.slice(0, paddingBytes(padding)))
+                        .cascadeTo(promiseAggregator.newPromise());
             }
 
             if (!flags.endOfHeaders()) {
-                writeContinuationFrames(ctx, streamId, headerBlock, padding, promiseAggregator);
+                writeContinuationFrames(ctx, streamId, headerBlock, promiseAggregator);
             }
         } catch (Http2Exception e) {
             promiseAggregator.setFailure(e);
         } catch (Throwable t) {
             promiseAggregator.setFailure(t);
             promiseAggregator.doneAllocatingPromises();
-            PlatformDependent.throwException(t);
+            throw t;
         } finally {
             if (headerBlock != null) {
                 headerBlock.release();
@@ -552,47 +552,33 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
     /**
      * Writes as many continuation frames as needed until {@code padding} and {@code headerBlock} are consumed.
      */
-    private ChannelFuture writeContinuationFrames(ChannelHandlerContext ctx, int streamId,
-            ByteBuf headerBlock, int padding, SimpleChannelPromiseAggregator promiseAggregator) {
-        Http2Flags flags = new Http2Flags().paddingPresent(padding > 0);
-        int maxFragmentLength = maxFrameSize - padding;
-        // TODO: same padding is applied to all frames, is this desired?
-        if (maxFragmentLength <= 0) {
-            return promiseAggregator.setFailure(new IllegalArgumentException(
-                    "Padding [" + padding + "] is too large for max frame size [" + maxFrameSize + "]"));
-        }
+    private Future<Void> writeContinuationFrames(ChannelHandlerContext ctx, int streamId,
+            ByteBuf headerBlock, SimpleChannelPromiseAggregator promiseAggregator) {
+        Http2Flags flags = new Http2Flags();
 
         if (headerBlock.isReadable()) {
             // The frame header (and padding) only changes on the last frame, so allocate it once and re-use
-            int fragmentReadableBytes = min(headerBlock.readableBytes(), maxFragmentLength);
-            int payloadLength = fragmentReadableBytes + padding;
+            int fragmentReadableBytes = min(headerBlock.readableBytes(), maxFrameSize);
             ByteBuf buf = ctx.alloc().buffer(CONTINUATION_FRAME_HEADER_LENGTH);
-            writeFrameHeaderInternal(buf, payloadLength, CONTINUATION, flags, streamId);
-            writePaddingLength(buf, padding);
+            writeFrameHeaderInternal(buf, fragmentReadableBytes, CONTINUATION, flags, streamId);
 
             do {
-                fragmentReadableBytes = min(headerBlock.readableBytes(), maxFragmentLength);
+                fragmentReadableBytes = min(headerBlock.readableBytes(), maxFrameSize);
                 ByteBuf fragment = headerBlock.readRetainedSlice(fragmentReadableBytes);
 
-                payloadLength = fragmentReadableBytes + padding;
                 if (headerBlock.isReadable()) {
-                    ctx.write(buf.retain(), promiseAggregator.newPromise());
+                    ctx.write(buf.retain()).cascadeTo(promiseAggregator.newPromise());
                 } else {
                     // The frame header is different for the last frame, so re-allocate and release the old buffer
                     flags = flags.endOfHeaders(true);
                     buf.release();
                     buf = ctx.alloc().buffer(CONTINUATION_FRAME_HEADER_LENGTH);
-                    writeFrameHeaderInternal(buf, payloadLength, CONTINUATION, flags, streamId);
-                    writePaddingLength(buf, padding);
-                    ctx.write(buf, promiseAggregator.newPromise());
+                    writeFrameHeaderInternal(buf, fragmentReadableBytes, CONTINUATION, flags, streamId);
+                    ctx.write(buf).cascadeTo(promiseAggregator.newPromise());
                 }
 
-                ctx.write(fragment, promiseAggregator.newPromise());
+                ctx.write(fragment).cascadeTo(promiseAggregator.newPromise());
 
-                // Write out the padding, if any.
-                if (paddingBytes(padding) > 0) {
-                    ctx.write(ZERO_BUFFER.slice(0, paddingBytes(padding)), promiseAggregator.newPromise());
-                }
             } while (headerBlock.isReadable());
         }
         return promiseAggregator;
@@ -616,11 +602,11 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
     }
 
     private static void verifyStreamId(int streamId, String argumentName) {
-        checkPositive(streamId, "streamId");
+        checkPositive(streamId, argumentName);
     }
 
     private static void verifyStreamOrConnectionId(int streamId, String argumentName) {
-        checkPositiveOrZero(streamId, "streamId");
+        checkPositiveOrZero(streamId, argumentName);
     }
 
     private static void verifyWeight(short weight) {
@@ -637,11 +623,5 @@ public class DefaultHttp2FrameWriter implements Http2FrameWriter, Http2FrameSize
 
     private static void verifyWindowSizeIncrement(int windowSizeIncrement) {
         checkPositiveOrZero(windowSizeIncrement, "windowSizeIncrement");
-    }
-
-    private static void verifyPingPayload(ByteBuf data) {
-        if (data == null || data.readableBytes() != PING_FRAME_PAYLOAD_LENGTH) {
-            throw new IllegalArgumentException("Opaque data must be " + PING_FRAME_PAYLOAD_LENGTH + " bytes");
-        }
     }
 }

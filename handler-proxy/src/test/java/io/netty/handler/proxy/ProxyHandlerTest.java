@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,8 +21,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
@@ -41,20 +39,18 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.resolver.NoopAddressResolverGroup;
 import io.netty.util.CharsetUtil;
-import io.netty.util.internal.SocketUtils;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.EmptyArrays;
+import io.netty.util.internal.SocketUtils;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -63,15 +59,17 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.Random;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
 
-@RunWith(Parameterized.class)
 public class ProxyHandlerTest {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ProxyHandlerTest.class);
@@ -137,7 +135,6 @@ public class ProxyHandlerTest {
     // look for "Seed used: *" debug message in test logs
     private static final long reproducibleSeed = 0L;
 
-    @Parameters(name = "{index}: {0}")
     public static List<Object[]> testItems() {
 
         List<TestItem> items = Arrays.asList(
@@ -417,39 +414,34 @@ public class ProxyHandlerTest {
         }
 
         // Randomize the execution order to increase the possibility of exposing failure dependencies.
-        long seed = (reproducibleSeed == 0L) ? System.currentTimeMillis() : reproducibleSeed;
+        long seed = reproducibleSeed == 0L? System.currentTimeMillis() : reproducibleSeed;
         logger.debug("Seed used: {}\n", seed);
         Collections.shuffle(params, new Random(seed));
 
         return params;
     }
 
-    @AfterClass
+    @AfterAll
     public static void stopServers() {
         for (ProxyServer p: allProxies) {
             p.stop();
         }
     }
 
-    private final TestItem testItem;
-
-    public ProxyHandlerTest(TestItem testItem) {
-        this.testItem = testItem;
-    }
-
-    @Before
+    @BeforeEach
     public void clearServerExceptions() throws Exception {
         for (ProxyServer p: allProxies) {
             p.clearExceptions();
         }
     }
 
-    @Test
-    public void test() throws Exception {
+    @ParameterizedTest(name = "{index}: {0}")
+    @MethodSource("testItems")
+    public void test(TestItem testItem) throws Exception {
         testItem.test();
     }
 
-    @After
+    @AfterEach
     public void checkServerExceptions() throws Exception {
         for (ProxyServer p: allProxies) {
             p.checkExceptions();
@@ -489,7 +481,7 @@ public class ProxyHandlerTest {
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+        protected void messageReceived(ChannelHandlerContext ctx, Object msg) throws Exception {
             String str = ((ByteBuf) msg).toString(CharsetUtil.US_ASCII);
             received.add(str);
             if ("2".equals(str)) {
@@ -521,7 +513,7 @@ public class ProxyHandlerTest {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             ctx.writeAndFlush(Unpooled.copiedBuffer("A\n", CharsetUtil.US_ASCII)).addListener(
-                    (ChannelFutureListener) future -> {
+                    future -> {
                         latch.countDown();
                         if (!(future.cause() instanceof ProxyConnectException)) {
                             exceptions.add(new AssertionError(
@@ -543,7 +535,7 @@ public class ProxyHandlerTest {
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+        protected void messageReceived(ChannelHandlerContext ctx, Object msg) throws Exception {
             fail("Unexpected message: " + msg);
         }
 
@@ -637,7 +629,7 @@ public class ProxyHandlerTest {
             Bootstrap b = new Bootstrap();
             b.group(group);
             b.channel(NioSocketChannel.class);
-            b.option(ChannelOption.AUTO_READ, this.autoRead);
+            b.option(ChannelOption.AUTO_READ, autoRead);
             b.resolver(NoopAddressResolverGroup.INSTANCE);
             b.handler(new ChannelInitializer<SocketChannel>() {
                 @Override
@@ -649,7 +641,8 @@ public class ProxyHandlerTest {
                 }
             });
 
-            boolean finished = b.connect(destination).channel().closeFuture().await(10, TimeUnit.SECONDS);
+            Channel channel = b.connect(destination).get();
+            boolean finished = channel.closeFuture().await(10, TimeUnit.SECONDS);
 
             logger.debug("Received messages: {}", testHandler.received);
 
@@ -697,7 +690,8 @@ public class ProxyHandlerTest {
                 }
             });
 
-            boolean finished = b.connect(destination).channel().closeFuture().await(10, TimeUnit.SECONDS);
+            Channel channel = b.connect(destination).get();
+            boolean finished = channel.closeFuture().await(10, TimeUnit.SECONDS);
             finished &= testHandler.latch.await(10, TimeUnit.SECONDS);
 
             logger.debug("Recorded exceptions: {}", testHandler.exceptions);
@@ -742,7 +736,8 @@ public class ProxyHandlerTest {
                 }
             });
 
-            ChannelFuture cf = b.connect(DESTINATION).channel().closeFuture();
+            Channel channel = b.connect(DESTINATION).get();
+            Future<Void> cf = channel.closeFuture();
             boolean finished = cf.await(TIMEOUT * 2, TimeUnit.MILLISECONDS);
             finished &= testHandler.latch.await(TIMEOUT * 2, TimeUnit.MILLISECONDS);
 

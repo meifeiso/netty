@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,37 +17,35 @@ package io.netty.channel.kqueue;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.MultithreadEventLoopGroup;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 
-import static org.hamcrest.Matchers.not;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assume.assumeThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class KQueueServerSocketChannelConfigTest {
 
     private static EventLoopGroup group;
     private static KQueueServerSocketChannel ch;
 
-    @BeforeClass
-    public static void before() {
+    @BeforeAll
+    public static void before() throws Exception {
         group = new MultithreadEventLoopGroup(1, KQueueHandler.newFactory());
         ServerBootstrap bootstrap = new ServerBootstrap();
         ch = (KQueueServerSocketChannel) bootstrap.group(group)
                 .channel(KQueueServerSocketChannel.class)
                 .childHandler(new ChannelHandler() { })
-                .bind(new InetSocketAddress(0)).syncUninterruptibly().channel();
+                .bind(new InetSocketAddress(0)).get();
     }
 
-    @AfterClass
+    @AfterAll
     public static void after() {
         try {
             ch.close().syncUninterruptibly();
@@ -68,7 +66,7 @@ public class KQueueServerSocketChannelConfigTest {
     public void testAcceptFilter() {
         AcceptFilter currentFilter = ch.config().getAcceptFilter();
         // Not all platforms support this option (e.g. MacOS doesn't) so test if we support the option first.
-        assumeThat(currentFilter, not(AcceptFilter.PLATFORM_UNSUPPORTED));
+        assumeTrue(currentFilter != AcceptFilter.PLATFORM_UNSUPPORTED);
 
         AcceptFilter af = new AcceptFilter("test", "foo");
         ch.config().setAcceptFilter(af);

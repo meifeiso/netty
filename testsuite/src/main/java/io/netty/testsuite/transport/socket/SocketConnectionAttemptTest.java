@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,59 +16,68 @@
 package io.netty.testsuite.transport.socket;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.ChannelFuture;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
-import io.netty.util.internal.SocketUtils;
+import io.netty.channel.ConnectTimeoutException;
 import io.netty.util.NetUtil;
+import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GlobalEventExecutor;
 import io.netty.util.concurrent.Promise;
+import io.netty.util.internal.SocketUtils;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.Socket;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 import static io.netty.testsuite.transport.socket.SocketTestPermutation.BAD_HOST;
 import static io.netty.testsuite.transport.socket.SocketTestPermutation.BAD_PORT;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class SocketConnectionAttemptTest extends AbstractClientSocketTest {
 
     // See /etc/services
     private static final int UNASSIGNED_PORT = 4;
 
-    @Test(timeout = 30000)
-    public void testConnectTimeout() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testConnectTimeout(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testConnectTimeout);
     }
 
     public void testConnectTimeout(Bootstrap cb) throws Throwable {
         cb.handler(new TestHandler()).option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 2000);
-        ChannelFuture future = cb.connect(BAD_HOST, BAD_PORT);
-        try {
-            assertThat(future.await(3000), is(true));
-        } finally {
-            future.channel().close();
-        }
+        Future<Channel> future = cb.connect(BAD_HOST, BAD_PORT);
+        assertThat(future.await(3000)).isTrue();
+        ExecutionException e = assertThrows(ExecutionException.class, future::get);
+        assertThat(e).hasCauseInstanceOf(ConnectTimeoutException.class);
     }
 
-    @Test(timeout = 30000)
-    public void testConnectRefused() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testConnectRefused(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testConnectRefused);
     }
 
     public void testConnectRefused(Bootstrap cb) throws Throwable {
         testConnectRefused0(cb, false);
     }
 
-    @Test(timeout = 30000)
-    public void testConnectRefusedHalfClosure() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testConnectRefusedHalfClosure(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testConnectRefusedHalfClosure);
     }
 
     public void testConnectRefusedHalfClosure(Bootstrap cb) throws Throwable {
@@ -86,13 +95,13 @@ public class SocketConnectionAttemptTest extends AbstractClientSocketTest {
 
         cb.handler(handler);
         cb.option(ChannelOption.ALLOW_HALF_CLOSURE, halfClosure);
-        ChannelFuture future = cb.connect(NetUtil.LOCALHOST, UNASSIGNED_PORT).awaitUninterruptibly();
-        assertThat(future.cause(), is(instanceOf(ConnectException.class)));
-        assertThat(errorPromise.cause(), is(nullValue()));
+        Future<Channel> future = cb.connect(NetUtil.LOCALHOST, UNASSIGNED_PORT).awaitUninterruptibly();
+        assertThat(future.cause()).isInstanceOf(ConnectException.class);
+        assertFalse(errorPromise.isFailed());
     }
 
     @Test
-    public void testConnectCancellation() throws Throwable {
+    public void testConnectCancellation(TestInfo testInfo) throws Throwable {
         // Check if the test can be executed or should be skipped because of no network/internet connection
         // See https://github.com/netty/netty/issues/1474
         boolean badHostTimedOut = true;
@@ -112,32 +121,27 @@ public class SocketConnectionAttemptTest extends AbstractClientSocketTest {
             }
         }
 
-        assumeThat("The connection attempt to " + BAD_HOST + " does not time out.",
-                badHostTimedOut, is(true));
+        assumeTrue(badHostTimedOut, "The connection attempt to " + BAD_HOST + " does not time out.");
 
-        run();
+        run(testInfo, this::testConnectCancellation);
     }
 
     public void testConnectCancellation(Bootstrap cb) throws Throwable {
         cb.handler(new TestHandler()).option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 4000);
-        ChannelFuture future = cb.connect(BAD_HOST, BAD_PORT);
-        try {
-            if (future.await(1000)) {
-                if (future.isSuccess()) {
-                    fail("A connection attempt to " + BAD_HOST + " must not succeed.");
-                } else {
-                    throw future.cause();
-                }
-            }
-
-            if (future.cancel(true)) {
-                assertThat(future.channel().closeFuture().await(500), is(true));
-                assertThat(future.isCancelled(), is(true));
+        Future<Channel> future = cb.connect(BAD_HOST, BAD_PORT);
+        if (future.await(1000)) {
+            if (future.isSuccess()) {
+                fail("A connection attempt to " + BAD_HOST + " must not succeed.");
             } else {
-                // Cancellation not supported by the transport.
+                throw future.cause();
             }
-        } finally {
-            future.channel().close();
+        }
+
+        if (future.cancel(true)) {
+            assertThat(future.isCancelled()).isTrue();
+        } else {
+            // Cancellation not supported by the transport.
+            future.get().close();
         }
     }
 

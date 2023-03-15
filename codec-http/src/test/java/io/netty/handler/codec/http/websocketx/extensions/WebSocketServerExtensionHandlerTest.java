@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,15 +19,28 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
 
-import org.junit.Test;
-
-import static io.netty.handler.codec.http.websocketx.extensions.WebSocketExtensionTestUtil.*;
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static io.netty.handler.codec.http.websocketx.extensions.WebSocketExtensionTestUtil.Dummy2Decoder;
+import static io.netty.handler.codec.http.websocketx.extensions.WebSocketExtensionTestUtil.Dummy2Encoder;
+import static io.netty.handler.codec.http.websocketx.extensions.WebSocketExtensionTestUtil.DummyDecoder;
+import static io.netty.handler.codec.http.websocketx.extensions.WebSocketExtensionTestUtil.DummyEncoder;
+import static io.netty.handler.codec.http.websocketx.extensions.WebSocketExtensionTestUtil.newUpgradeRequest;
+import static io.netty.handler.codec.http.websocketx.extensions.WebSocketExtensionTestUtil.newUpgradeResponse;
+import static io.netty.handler.codec.http.websocketx.extensions.WebSocketExtensionTestUtil.webSocketExtensionDataMatcher;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class WebSocketServerExtensionHandlerTest {
 
@@ -62,8 +75,9 @@ public class WebSocketServerExtensionHandlerTest {
         when(fallbackExtensionMock.rsv()).thenReturn(WebSocketExtension.RSV1);
 
         // execute
-        EmbeddedChannel ch = new EmbeddedChannel(new WebSocketServerExtensionHandler(
-                mainHandshakerMock, fallbackHandshakerMock));
+        WebSocketServerExtensionHandler extensionHandler =
+                new WebSocketServerExtensionHandler(mainHandshakerMock, fallbackHandshakerMock);
+        EmbeddedChannel ch = new EmbeddedChannel(extensionHandler);
 
         HttpRequest req = newUpgradeRequest("main, fallback");
         ch.writeInbound(req);
@@ -76,6 +90,7 @@ public class WebSocketServerExtensionHandlerTest {
                 res2.headers().get(HttpHeaderNames.SEC_WEBSOCKET_EXTENSIONS));
 
         // test
+        assertNull(ch.pipeline().context(extensionHandler));
         assertEquals(1, resExts.size());
         assertEquals("main", resExts.get(0).name());
         assertTrue(resExts.get(0).parameters().isEmpty());
@@ -119,8 +134,9 @@ public class WebSocketServerExtensionHandlerTest {
         when(fallbackExtensionMock.newExtensionDecoder()).thenReturn(new Dummy2Decoder());
 
         // execute
-        EmbeddedChannel ch = new EmbeddedChannel(new WebSocketServerExtensionHandler(
-                mainHandshakerMock, fallbackHandshakerMock));
+        WebSocketServerExtensionHandler extensionHandler =
+                new WebSocketServerExtensionHandler(mainHandshakerMock, fallbackHandshakerMock);
+        EmbeddedChannel ch = new EmbeddedChannel(extensionHandler);
 
         HttpRequest req = newUpgradeRequest("main, fallback");
         ch.writeInbound(req);
@@ -133,6 +149,7 @@ public class WebSocketServerExtensionHandlerTest {
                 res2.headers().get(HttpHeaderNames.SEC_WEBSOCKET_EXTENSIONS));
 
         // test
+        assertNull(ch.pipeline().context(extensionHandler));
         assertEquals(2, resExts.size());
         assertEquals("main", resExts.get(0).name());
         assertEquals("fallback", resExts.get(1).name());
@@ -170,8 +187,9 @@ public class WebSocketServerExtensionHandlerTest {
                 thenReturn(null);
 
         // execute
-        EmbeddedChannel ch = new EmbeddedChannel(new WebSocketServerExtensionHandler(
-                mainHandshakerMock, fallbackHandshakerMock));
+        WebSocketServerExtensionHandler extensionHandler =
+                new WebSocketServerExtensionHandler(mainHandshakerMock, fallbackHandshakerMock);
+        EmbeddedChannel ch = new EmbeddedChannel(extensionHandler);
 
         HttpRequest req = newUpgradeRequest("unknown, unknown2");
         ch.writeInbound(req);
@@ -182,6 +200,7 @@ public class WebSocketServerExtensionHandlerTest {
         HttpResponse res2 = ch.readOutbound();
 
         // test
+        assertNull(ch.pipeline().context(extensionHandler));
         assertFalse(res2.headers().contains(HttpHeaderNames.SEC_WEBSOCKET_EXTENSIONS));
 
         verify(mainHandshakerMock).handshakeExtension(webSocketExtensionDataMatcher("unknown"));

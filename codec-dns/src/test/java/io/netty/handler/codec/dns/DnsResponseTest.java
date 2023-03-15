@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,14 +21,14 @@ import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.CorruptedFrameException;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DnsResponseTest {
 
@@ -90,16 +90,30 @@ public class DnsResponseTest {
 
             envelope.release();
         }
+        assertFalse(embedder.finish());
     }
-
-    @Rule
-    public ExpectedException exception = ExpectedException.none();
 
     @Test
     public void readMalformedResponseTest() throws Exception {
         EmbeddedChannel embedder = new EmbeddedChannel(new DatagramDnsResponseDecoder());
         ByteBuf packet = embedder.alloc().buffer(512).writeBytes(malformedLoopPacket);
-        exception.expect(CorruptedFrameException.class);
-        embedder.writeInbound(new DatagramPacket(packet, null, new InetSocketAddress(0)));
+        try {
+            assertThrows(CorruptedFrameException.class,
+                () -> embedder.writeInbound(new DatagramPacket(packet, null, new InetSocketAddress(0))));
+        } finally {
+            assertFalse(embedder.finish());
+        }
+    }
+
+    @Test
+    public void readIncompleteResponseTest() {
+        EmbeddedChannel embedder = new EmbeddedChannel(new DatagramDnsResponseDecoder());
+        ByteBuf packet = embedder.alloc().buffer(512);
+        try {
+            assertThrows(CorruptedFrameException.class,
+                () -> embedder.writeInbound(new DatagramPacket(packet, null, new InetSocketAddress(0))));
+        } finally {
+            assertFalse(embedder.finish());
+        }
     }
 }

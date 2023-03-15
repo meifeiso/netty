@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -16,12 +16,10 @@
 package io.netty.handler.codec.http2;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2Stream.State;
 import io.netty.util.collection.IntObjectHashMap;
 import io.netty.util.collection.IntObjectMap;
 import io.netty.util.collection.IntObjectMap.PrimitiveEntry;
-import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.Promise;
 import io.netty.util.concurrent.UnaryPromiseNotifier;
 import io.netty.util.internal.EmptyArrays;
@@ -117,15 +115,13 @@ public class DefaultHttp2Connection implements Http2Connection {
     }
 
     @Override
-    public Future<Void> close(final Promise<Void> promise) {
+    public void close(final Promise<Void> promise) {
         requireNonNull(promise, "promise");
         // Since we allow this method to be called multiple times, we must make sure that all the promises are notified
         // when all streams are removed and the close operation completes.
         if (closePromise != null) {
             if (closePromise == promise) {
                 // Do nothing
-            } else if ((promise instanceof ChannelPromise) && ((ChannelPromise) closePromise).isVoid()) {
-                closePromise = promise;
             } else {
                 closePromise.addListener(new UnaryPromiseNotifier<>(promise));
             }
@@ -134,7 +130,7 @@ public class DefaultHttp2Connection implements Http2Connection {
         }
         if (isStreamMapEmpty()) {
             promise.trySuccess(null);
-            return promise;
+            return;
         }
 
         Iterator<PrimitiveEntry<Http2Stream>> itr = streamMap.entries().iterator();
@@ -165,7 +161,6 @@ public class DefaultHttp2Connection implements Http2Connection {
                 }
             }
         }
-        return closePromise;
     }
 
     @Override
@@ -678,7 +673,7 @@ public class DefaultHttp2Connection implements Http2Connection {
          */
         private int nextReservationStreamId;
         private int lastStreamKnownByPeer = -1;
-        private boolean pushToAllowed = true;
+        private boolean pushToAllowed;
         private F flowController;
         private int maxStreams;
         private int maxActiveStreams;
@@ -843,7 +838,7 @@ public class DefaultHttp2Connection implements Http2Connection {
         }
 
         private void lastStreamKnownByPeer(int lastKnownStream) {
-            this.lastStreamKnownByPeer = lastKnownStream;
+            lastStreamKnownByPeer = lastKnownStream;
         }
 
         @Override
@@ -886,7 +881,10 @@ public class DefaultHttp2Connection implements Http2Connection {
                         streamId, nextStreamIdToCreate);
             }
             if (nextStreamIdToCreate <= 0) {
-                throw connectionError(REFUSED_STREAM, "Stream IDs are exhausted for this endpoint.");
+                // We exhausted the stream id space that we  can use. Let's signal this back but also signal that
+                // we still may want to process active streams.
+                throw new Http2Exception(REFUSED_STREAM, "Stream IDs are exhausted for this endpoint.",
+                        Http2Exception.ShutdownHint.GRACEFUL_SHUTDOWN);
             }
             boolean isReserved = state == RESERVED_LOCAL || state == RESERVED_REMOTE;
             if (!isReserved && !canOpenStream() || isReserved && numStreams >= maxStreams) {

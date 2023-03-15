@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,27 +22,31 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.util.ReferenceCountUtil;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class CompositeBufferGatheringWriteTest extends AbstractSocketTest {
     private static final int EXPECTED_BYTES = 20;
 
-    @Test(timeout = 10000)
-    public void testSingleCompositeBufferWrite() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testSingleCompositeBufferWrite(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testSingleCompositeBufferWrite);
     }
 
     public void testSingleCompositeBufferWrite(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -58,7 +62,7 @@ public class CompositeBufferGatheringWriteTest extends AbstractSocketTest {
                         @Override
                         public void channelActive(ChannelHandlerContext ctx) throws Exception {
                             ctx.writeAndFlush(newCompositeBuffer(ctx.alloc()))
-                                    .addListener(ChannelFutureListener.CLOSE);
+                                    .addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
                         }
                     });
                 }
@@ -111,8 +115,8 @@ public class CompositeBufferGatheringWriteTest extends AbstractSocketTest {
                 }
             });
 
-            serverChannel = sb.bind().syncUninterruptibly().channel();
-            clientChannel = cb.connect(serverChannel.localAddress()).syncUninterruptibly().channel();
+            serverChannel = sb.bind().get();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
 
             ByteBuf expected = newCompositeBuffer(clientChannel.alloc());
             latch.await();
@@ -136,9 +140,10 @@ public class CompositeBufferGatheringWriteTest extends AbstractSocketTest {
         }
     }
 
-    @Test(timeout = 10000)
-    public void testCompositeBufferPartialWriteDoesNotCorruptData() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testCompositeBufferPartialWriteDoesNotCorruptData(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testCompositeBufferPartialWriteDoesNotCorruptData);
     }
 
     protected void compositeBufferPartialWriteDoesNotCorruptDataInitServerConfig(ChannelConfig config,
@@ -191,7 +196,7 @@ public class CompositeBufferGatheringWriteTest extends AbstractSocketTest {
                             // Write the remainder of the content
                             ctx.writeAndFlush(expectedContent.retainedSlice(expectedContent.readerIndex() + offset,
                                     expectedContent.readableBytes() - expectedContent.readerIndex() - offset))
-                                    .addListener(ChannelFutureListener.CLOSE);
+                                    .addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
                         }
 
                         @Override
@@ -253,8 +258,8 @@ public class CompositeBufferGatheringWriteTest extends AbstractSocketTest {
                 }
             });
 
-            serverChannel = sb.bind().syncUninterruptibly().channel();
-            clientChannel = cb.connect(serverChannel.localAddress()).syncUninterruptibly().channel();
+            serverChannel = sb.bind().get();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
 
             latch.await();
             Object received = clientReceived.get();

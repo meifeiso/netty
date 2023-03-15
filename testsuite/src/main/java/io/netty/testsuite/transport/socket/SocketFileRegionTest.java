@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -26,20 +26,23 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.FileRegion;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.util.internal.PlatformDependent;
 import org.hamcrest.CoreMatchers;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.channels.WritableByteChannel;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class SocketFileRegionTest extends AbstractSocketTest {
 
@@ -50,57 +53,39 @@ public class SocketFileRegionTest extends AbstractSocketTest {
     }
 
     @Test
-    public void testFileRegion() throws Throwable {
-        run();
+    public void testFileRegion(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testFileRegion);
     }
 
     @Test
-    public void testCustomFileRegion() throws Throwable {
-        run();
+    public void testCustomFileRegion(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testCustomFileRegion);
     }
 
     @Test
-    public void testFileRegionNotAutoRead() throws Throwable {
-        run();
+    public void testFileRegionNotAutoRead(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testFileRegionNotAutoRead);
     }
 
     @Test
-    public void testFileRegionVoidPromise() throws Throwable {
-        run();
-    }
-
-    @Test
-    public void testFileRegionVoidPromiseNotAutoRead() throws Throwable {
-        run();
-    }
-
-    @Test
-    public void testFileRegionCountLargerThenFile() throws Throwable {
-        run();
+    public void testFileRegionCountLargerThenFile(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testFileRegionCountLargerThenFile);
     }
 
     public void testFileRegion(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testFileRegion0(sb, cb, false, true, true);
+        testFileRegion0(sb, cb, true, true);
     }
 
     public void testCustomFileRegion(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testFileRegion0(sb, cb, false, true, false);
-    }
-
-    public void testFileRegionVoidPromise(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testFileRegion0(sb, cb, true, true, true);
+        testFileRegion0(sb, cb, true, false);
     }
 
     public void testFileRegionNotAutoRead(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testFileRegion0(sb, cb, false, false, true);
-    }
-
-    public void testFileRegionVoidPromiseNotAutoRead(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testFileRegion0(sb, cb, true, false, true);
+        testFileRegion0(sb, cb, false, true);
     }
 
     public void testFileRegionCountLargerThenFile(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        File file = File.createTempFile("netty-", ".tmp");
+        File file = PlatformDependent.createTempFile("netty-", ".tmp", null);
         file.deleteOnExit();
 
         final FileOutputStream out = new FileOutputStream(file);
@@ -109,18 +94,18 @@ public class SocketFileRegionTest extends AbstractSocketTest {
 
         sb.childHandler(new SimpleChannelInboundHandler<ByteBuf>() {
             @Override
-            protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
+            protected void messageReceived(ChannelHandlerContext ctx, ByteBuf msg) {
                 // Just drop the message.
             }
         });
         cb.handler(new ChannelHandler() { });
 
-        Channel sc = sb.bind().sync().channel();
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
+        Channel sc = sb.bind().get();
+        Channel cc = cb.connect(sc.localAddress()).get();
 
         // Request file region which is bigger then the underlying file.
         FileRegion region = new DefaultFileRegion(
-                new FileInputStream(file).getChannel(), 0, data.length + 1024);
+                new RandomAccessFile(file, "r").getChannel(), 0, data.length + 1024);
 
         assertThat(cc.writeAndFlush(region).await().cause(), CoreMatchers.<Throwable>instanceOf(IOException.class));
         cc.close().sync();
@@ -128,13 +113,13 @@ public class SocketFileRegionTest extends AbstractSocketTest {
     }
 
     private static void testFileRegion0(
-            ServerBootstrap sb, Bootstrap cb, boolean voidPromise, final boolean autoRead, boolean defaultFileRegion)
+            ServerBootstrap sb, Bootstrap cb, final boolean autoRead, boolean defaultFileRegion)
             throws Throwable {
         sb.childOption(ChannelOption.AUTO_READ, autoRead);
         cb.option(ChannelOption.AUTO_READ, autoRead);
 
         final int bufferSize = 1024;
-        final File file = File.createTempFile("netty-", ".tmp");
+        final File file = PlatformDependent.createTempFile("netty-", ".tmp", null);
         file.deleteOnExit();
 
         final FileOutputStream out = new FileOutputStream(file);
@@ -158,7 +143,7 @@ public class SocketFileRegionTest extends AbstractSocketTest {
 
         ChannelHandler ch = new SimpleChannelInboundHandler<Object>() {
             @Override
-            public void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+            public void messageReceived(ChannelHandlerContext ctx, Object msg) throws Exception {
             }
 
             @Override
@@ -178,12 +163,12 @@ public class SocketFileRegionTest extends AbstractSocketTest {
         sb.childHandler(sh);
         cb.handler(ch);
 
-        Channel sc = sb.bind().sync().channel();
+        Channel sc = sb.bind().get();
 
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
+        Channel cc = cb.connect(sc.localAddress()).get();
         FileRegion region = new DefaultFileRegion(
-                new FileInputStream(file).getChannel(), startOffset, data.length - bufferSize);
-        FileRegion emptyRegion = new DefaultFileRegion(new FileInputStream(file).getChannel(), 0, 0);
+                new RandomAccessFile(file, "r").getChannel(), startOffset, data.length - bufferSize);
+        FileRegion emptyRegion = new DefaultFileRegion(new RandomAccessFile(file, "r").getChannel(), 0, 0);
 
         if (!defaultFileRegion) {
             region = new FileRegionWrapper(region);
@@ -194,15 +179,9 @@ public class SocketFileRegionTest extends AbstractSocketTest {
         //
         // See https://github.com/netty/netty/issues/2769
         //     https://github.com/netty/netty/issues/2964
-        if (voidPromise) {
-            assertEquals(cc.voidPromise(), cc.write(Unpooled.wrappedBuffer(data, 0, bufferSize), cc.voidPromise()));
-            assertEquals(cc.voidPromise(), cc.write(emptyRegion, cc.voidPromise()));
-            assertEquals(cc.voidPromise(), cc.writeAndFlush(region, cc.voidPromise()));
-        } else {
-            assertNotEquals(cc.voidPromise(), cc.write(Unpooled.wrappedBuffer(data, 0, bufferSize)));
-            assertNotEquals(cc.voidPromise(), cc.write(emptyRegion));
-            assertNotEquals(cc.voidPromise(), cc.writeAndFlush(region));
-        }
+        cc.write(Unpooled.wrappedBuffer(data, 0, bufferSize));
+        cc.write(emptyRegion);
+        cc.writeAndFlush(region);
 
         while (sh.counter < data.length) {
             if (sh.exception.get() != null) {
@@ -252,7 +231,7 @@ public class SocketFileRegionTest extends AbstractSocketTest {
         }
 
         @Override
-        public void channelRead0(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        public void messageReceived(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
             byte[] actual = new byte[in.readableBytes()];
             in.readBytes(actual);
 

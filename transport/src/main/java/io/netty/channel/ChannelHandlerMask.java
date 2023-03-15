@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,9 +17,9 @@ package io.netty.channel;
 
 import io.netty.util.concurrent.FastThreadLocal;
 import io.netty.util.internal.PlatformDependent;
-
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
@@ -129,31 +129,29 @@ final class ChannelHandlerMask {
             if (isSkippable(handlerType, "userEventTriggered", ChannelHandlerContext.class, Object.class)) {
                 mask &= ~MASK_USER_EVENT_TRIGGERED;
             }
-            if (isSkippable(handlerType, "bind", ChannelHandlerContext.class,
-                    SocketAddress.class, ChannelPromise.class)) {
+            if (isSkippable(handlerType, "bind", ChannelHandlerContext.class, SocketAddress.class)) {
                 mask &= ~MASK_BIND;
             }
             if (isSkippable(handlerType, "connect", ChannelHandlerContext.class, SocketAddress.class,
-                    SocketAddress.class, ChannelPromise.class)) {
+                    SocketAddress.class)) {
                 mask &= ~MASK_CONNECT;
             }
-            if (isSkippable(handlerType, "disconnect", ChannelHandlerContext.class, ChannelPromise.class)) {
+            if (isSkippable(handlerType, "disconnect", ChannelHandlerContext.class)) {
                 mask &= ~MASK_DISCONNECT;
             }
-            if (isSkippable(handlerType, "close", ChannelHandlerContext.class, ChannelPromise.class)) {
+            if (isSkippable(handlerType, "close", ChannelHandlerContext.class)) {
                 mask &= ~MASK_CLOSE;
             }
-            if (isSkippable(handlerType, "register", ChannelHandlerContext.class, ChannelPromise.class)) {
+            if (isSkippable(handlerType, "register", ChannelHandlerContext.class)) {
                 mask &= ~MASK_REGISTER;
             }
-            if (isSkippable(handlerType, "deregister", ChannelHandlerContext.class, ChannelPromise.class)) {
+            if (isSkippable(handlerType, "deregister", ChannelHandlerContext.class)) {
                 mask &= ~MASK_DEREGISTER;
             }
             if (isSkippable(handlerType, "read", ChannelHandlerContext.class)) {
                 mask &= ~MASK_READ;
             }
-            if (isSkippable(handlerType, "write", ChannelHandlerContext.class,
-                    Object.class, ChannelPromise.class)) {
+            if (isSkippable(handlerType, "write", ChannelHandlerContext.class, Object.class)) {
                 mask &= ~MASK_WRITE;
             }
             if (isSkippable(handlerType, "flush", ChannelHandlerContext.class)) {
@@ -167,7 +165,6 @@ final class ChannelHandlerMask {
         return mask;
     }
 
-    @SuppressWarnings("rawtypes")
     private static boolean isSkippable(
             final Class<?> handlerType, final String methodName, final Class<?>... paramTypes) throws Exception {
         return AccessController.doPrivileged((PrivilegedExceptionAction<Boolean>) () -> {
@@ -175,11 +172,13 @@ final class ChannelHandlerMask {
             try {
                 m = handlerType.getMethod(methodName, paramTypes);
             } catch (NoSuchMethodException e) {
-                logger.debug(
-                        "Class {} missing method {}, assume we can not skip execution", handlerType, methodName, e);
+                if (logger.isDebugEnabled()) {
+                    logger.debug(
+                            "Class {} missing method {}, assume we can not skip execution", handlerType, methodName, e);
+                }
                 return false;
             }
-            return m != null && m.isAnnotationPresent(Skip.class);
+            return m.isAnnotationPresent(Skip.class);
         });
     }
 

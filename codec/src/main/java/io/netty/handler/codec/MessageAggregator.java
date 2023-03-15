@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,14 +18,13 @@ package io.netty.handler.codec;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.CompositeByteBuf;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.util.ReferenceCountUtil;
-
-import java.util.List;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureContextListener;
 
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
@@ -60,7 +59,7 @@ public abstract class MessageAggregator<I, S, C extends ByteBufHolder, O extends
 
     private int maxCumulationBufferComponents = DEFAULT_MAX_COMPOSITEBUFFER_COMPONENTS;
     private ChannelHandlerContext ctx;
-    private ChannelFutureListener continueResponseWriteListener;
+    private FutureContextListener<ChannelHandlerContext, Void> continueResponseWriteListener;
 
     private boolean aggregating;
 
@@ -205,9 +204,8 @@ public abstract class MessageAggregator<I, S, C extends ByteBufHolder, O extends
     }
 
     @Override
-    protected void decode(final ChannelHandlerContext ctx, I msg, List<Object> out) throws Exception {
+    protected void decode(final ChannelHandlerContext ctx, I msg) throws Exception {
         assert aggregating;
-
         if (isStartMessage(msg)) {
             handlingOversizedMessage = false;
             if (currentMessage != null) {
@@ -224,11 +222,11 @@ public abstract class MessageAggregator<I, S, C extends ByteBufHolder, O extends
             Object continueResponse = newContinueResponse(m, maxContentLength, ctx.pipeline());
             if (continueResponse != null) {
                 // Cache the write listener for reuse.
-                ChannelFutureListener listener = continueResponseWriteListener;
+                FutureContextListener<ChannelHandlerContext, Void> listener = continueResponseWriteListener;
                 if (listener == null) {
-                    continueResponseWriteListener = listener = future -> {
-                        if (!future.isSuccess()) {
-                            ctx.fireExceptionCaught(future.cause());
+                    continueResponseWriteListener = listener = (context, future) -> {
+                        if (future.isFailed()) {
+                            context.fireExceptionCaught(future.cause());
                         }
                     };
                 }
@@ -237,10 +235,10 @@ public abstract class MessageAggregator<I, S, C extends ByteBufHolder, O extends
                 boolean closeAfterWrite = closeAfterContinueResponse(continueResponse);
                 handlingOversizedMessage = ignoreContentAfterContinueResponse(continueResponse);
 
-                final ChannelFuture future = ctx.writeAndFlush(continueResponse).addListener(listener);
+                Future<Void> future = ctx.writeAndFlush(continueResponse).addListener(ctx, listener);
 
                 if (closeAfterWrite) {
-                    future.addListener(ChannelFutureListener.CLOSE);
+                    future.addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
                     return;
                 }
                 if (handlingOversizedMessage) {
@@ -259,8 +257,8 @@ public abstract class MessageAggregator<I, S, C extends ByteBufHolder, O extends
                 } else {
                     aggregated = beginAggregation(m, EMPTY_BUFFER);
                 }
-                finishAggregation0(aggregated);
-                out.add(aggregated);
+                finishAggregation(aggregated);
+                ctx.fireChannelRead(aggregated);
                 return;
             }
 
@@ -317,8 +315,9 @@ public abstract class MessageAggregator<I, S, C extends ByteBufHolder, O extends
                 finishAggregation0(currentMessage);
 
                 // All done
-                out.add(currentMessage);
+                O message = currentMessage;
                 currentMessage = null;
+                ctx.fireChannelRead(message);
             }
         } else {
             throw new MessageAggregationException();

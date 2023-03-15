@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,13 +24,16 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class SocketEchoTest extends AbstractSocketTest {
 
@@ -41,44 +44,28 @@ public class SocketEchoTest extends AbstractSocketTest {
         random.nextBytes(data);
     }
 
-    @Test(timeout = 30000)
-    public void testSimpleEcho() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testSimpleEcho(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testSimpleEcho);
     }
 
     public void testSimpleEcho(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testSimpleEcho0(sb, cb, false, true);
+        testSimpleEcho0(sb, cb, true);
     }
 
-    @Test(timeout = 30000)
-    public void testSimpleEchoNotAutoRead() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testSimpleEchoNotAutoRead(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testSimpleEchoNotAutoRead);
     }
 
     public void testSimpleEchoNotAutoRead(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testSimpleEcho0(sb, cb, false, false);
-    }
-
-    @Test//(timeout = 30000)
-    public void testSimpleEchoWithVoidPromise() throws Throwable {
-        run();
-    }
-
-    public void testSimpleEchoWithVoidPromise(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testSimpleEcho0(sb, cb, true, true);
-    }
-
-    @Test//(timeout = 30000)
-    public void testSimpleEchoWithVoidPromiseNotAutoRead() throws Throwable {
-        run();
-    }
-
-    public void testSimpleEchoWithVoidPromiseNotAutoRead(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        testSimpleEcho0(sb, cb, true, false);
+        testSimpleEcho0(sb, cb, false);
     }
 
     private static void testSimpleEcho0(
-            ServerBootstrap sb, Bootstrap cb, boolean voidPromise, boolean autoRead)
+            ServerBootstrap sb, Bootstrap cb, boolean autoRead)
             throws Throwable {
 
         final EchoHandler sh = new EchoHandler(autoRead);
@@ -95,17 +82,13 @@ public class SocketEchoTest extends AbstractSocketTest {
         sb.childOption(ChannelOption.AUTO_READ, autoRead);
         cb.option(ChannelOption.AUTO_READ, autoRead);
 
-        Channel sc = sb.bind().sync().channel();
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
+        Channel sc = sb.bind().get();
+        Channel cc = cb.connect(sc.localAddress()).get();
 
         for (int i = 0; i < data.length;) {
             int length = Math.min(random.nextInt(1024 * 64), data.length - i);
             ByteBuf buf = Unpooled.wrappedBuffer(data, i, length);
-            if (voidPromise) {
-                assertEquals(cc.voidPromise(), cc.writeAndFlush(buf, cc.voidPromise()));
-            } else {
-                assertNotEquals(cc.voidPromise(), cc.writeAndFlush(buf));
-            }
+            cc.writeAndFlush(buf);
             i += length;
         }
 
@@ -177,7 +160,7 @@ public class SocketEchoTest extends AbstractSocketTest {
         }
 
         @Override
-        public void channelRead0(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        public void messageReceived(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
             byte[] actual = new byte[in.readableBytes()];
             in.readBytes(actual);
 

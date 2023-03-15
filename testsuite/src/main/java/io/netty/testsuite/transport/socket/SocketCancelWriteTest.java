@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,22 +20,26 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import org.junit.Test;
+import io.netty.util.concurrent.Future;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SocketCancelWriteTest extends AbstractSocketTest {
 
-    @Test(timeout = 30000)
-    public void testCancelWrite() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testCancelWrite(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testCancelWrite);
     }
 
     public void testCancelWrite(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -50,14 +54,14 @@ public class SocketCancelWriteTest extends AbstractSocketTest {
         cb.handler(ch);
         sb.childHandler(sh);
 
-        Channel sc = sb.bind().sync().channel();
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
+        Channel sc = sb.bind().get();
+        Channel cc = cb.connect(sc.localAddress()).get();
 
-        ChannelFuture f = cc.write(a);
+        Future<Void> f = cc.write(a);
         assertTrue(f.cancel(false));
         cc.writeAndFlush(b);
         cc.write(c);
-        ChannelFuture f2 = cc.write(d);
+        Future<Void> f2 = cc.write(d);
         assertTrue(f2.cancel(false));
         cc.writeAndFlush(e);
 
@@ -106,7 +110,7 @@ public class SocketCancelWriteTest extends AbstractSocketTest {
         }
 
         @Override
-        public void channelRead0(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        public void messageReceived(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
             counter += in.readableBytes();
             received.writeBytes(in);
         }

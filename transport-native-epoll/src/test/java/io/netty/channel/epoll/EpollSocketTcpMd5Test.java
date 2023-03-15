@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,17 +23,20 @@ import io.netty.channel.ConnectTimeoutException;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.MultithreadEventLoopGroup;
 import io.netty.util.CharsetUtil;
+import io.netty.util.NetUtil;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 
-import io.netty.util.NetUtil;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class EpollSocketTcpMd5Test {
     private static final byte[] SERVER_KEY = "abc".getBytes(CharsetUtil.US_ASCII);
@@ -41,26 +44,26 @@ public class EpollSocketTcpMd5Test {
     private static EventLoopGroup GROUP;
     private EpollServerSocketChannel server;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         GROUP = new MultithreadEventLoopGroup(1, EpollHandler.newFactory());
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         GROUP.shutdownGracefully();
     }
 
-    @Before
-    public void setup() {
+    @BeforeEach
+    public void setup() throws Exception {
         ServerBootstrap bootstrap = new ServerBootstrap();
         server = (EpollServerSocketChannel) bootstrap.group(GROUP)
                 .channel(EpollServerSocketChannel.class)
                 .childHandler(new ChannelHandler() { })
-                .bind(new InetSocketAddress(NetUtil.LOCALHOST4, 0)).syncUninterruptibly().channel();
+                .bind(new InetSocketAddress(NetUtil.LOCALHOST4, 0)).get();
     }
 
-    @After
+    @AfterEach
     public void teardown() {
         server.close().syncUninterruptibly();
     }
@@ -78,7 +81,7 @@ public class EpollSocketTcpMd5Test {
         EpollServerSocketChannel ch = (EpollServerSocketChannel) bootstrap.group(GROUP)
                 .channel(EpollServerSocketChannel.class)
                 .childHandler(new ChannelHandler() { })
-                .bind(new InetSocketAddress(0)).syncUninterruptibly().channel();
+                .bind(new InetSocketAddress(0)).get();
 
         ch.config().setOption(EpollChannelOption.TCP_MD5SIG,
                 Collections.singletonMap(NetUtil.LOCALHOST4, SERVER_KEY));
@@ -87,12 +90,12 @@ public class EpollSocketTcpMd5Test {
         ch.close().syncUninterruptibly();
     }
 
-    @Test(expected = ConnectTimeoutException.class)
+    @Test
     public void testKeyMismatch() throws Throwable {
         server.config().setOption(EpollChannelOption.TCP_MD5SIG,
                 Collections.singletonMap(NetUtil.LOCALHOST4, SERVER_KEY));
 
-        try {
+        ExecutionException completion = assertThrows(ExecutionException.class, () -> {
             EpollSocketChannel client = (EpollSocketChannel) new Bootstrap().group(GROUP)
                     .channel(EpollSocketChannel.class)
                     .handler(new ChannelHandler() {
@@ -100,11 +103,11 @@ public class EpollSocketTcpMd5Test {
                     .option(EpollChannelOption.TCP_MD5SIG,
                             Collections.singletonMap(NetUtil.LOCALHOST4, BAD_KEY))
                     .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1000)
-                    .connect(server.localAddress()).syncUninterruptibly().channel();
+                    .connect(server.localAddress()).get();
             client.close().syncUninterruptibly();
-        } catch (CompletionException e) {
-            throw e.getCause();
-        }
+        });
+        assertThat(completion.getCause())
+                .isInstanceOf(ConnectTimeoutException.class);
     }
 
     @Test
@@ -117,7 +120,7 @@ public class EpollSocketTcpMd5Test {
                 .handler(new ChannelHandler() { })
                 .option(EpollChannelOption.TCP_MD5SIG,
                         Collections.singletonMap(NetUtil.LOCALHOST4, SERVER_KEY))
-                .connect(server.localAddress()).syncUninterruptibly().channel();
+                .connect(server.localAddress()).get();
         client.close().syncUninterruptibly();
     }
 }

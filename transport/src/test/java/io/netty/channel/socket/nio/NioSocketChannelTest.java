@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,8 +20,7 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
@@ -35,7 +34,9 @@ import io.netty.channel.nio.NioHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.util.CharsetUtil;
 import io.netty.util.NetUtil;
-import org.junit.Test;
+import io.netty.util.concurrent.Future;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -53,9 +54,11 @@ import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 
 public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChannel> {
@@ -67,7 +70,7 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
     public void testFlushCloseReentrance() throws Exception {
         EventLoopGroup group = new MultithreadEventLoopGroup(1, NioHandler.newFactory());
         try {
-            final Queue<ChannelFuture> futures = new LinkedBlockingQueue<>();
+            final Queue<Future<Void>> futures = new LinkedBlockingQueue<>();
 
             ServerBootstrap sb = new ServerBootstrap();
             sb.group(group).channel(NioServerSocketChannel.class);
@@ -76,8 +79,8 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
                 @Override
                 public void channelActive(ChannelHandlerContext ctx) throws Exception {
                     // Write a large enough data so that it is split into two loops.
-                    futures.add(ctx.write(
-                            ctx.alloc().buffer().writeZero(1048576)).addListener(ChannelFutureListener.CLOSE));
+                    futures.add(ctx.write(ctx.alloc().buffer().writeZero(1048576))
+                                   .addListener(ctx.channel(), ChannelFutureListeners.CLOSE));
                     futures.add(ctx.write(ctx.alloc().buffer().writeZero(1048576)));
                     ctx.flush();
                     futures.add(ctx.write(ctx.alloc().buffer().writeZero(1048576)));
@@ -85,7 +88,7 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
                 }
             });
 
-            SocketAddress address = sb.bind(0).sync().channel().localAddress();
+            SocketAddress address = sb.bind(0).get().localAddress();
 
             Socket s = new Socket(NetUtil.LOCALHOST, ((InetSocketAddress) address).getPort());
 
@@ -96,15 +99,15 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
                     break;
                 }
 
-                // Wait a little bit so that the write attempts are split into multiple flush attempts.
+                // Wait for a bit so that the write attempts are split into multiple flush attempts.
                 Thread.sleep(10);
             }
             s.close();
 
             assertThat(futures.size(), is(3));
-            ChannelFuture f1 = futures.poll();
-            ChannelFuture f2 = futures.poll();
-            ChannelFuture f3 = futures.poll();
+            Future<Void> f1 = futures.poll();
+            Future<Void> f2 = futures.poll();
+            Future<Void> f3 = futures.poll();
             assertThat(f1.isSuccess(), is(true));
             assertThat(f2.isDone(), is(true));
             assertThat(f2.isSuccess(), is(false));
@@ -131,8 +134,8 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
                 public void channelActive(final ChannelHandlerContext ctx) throws Exception {
                     // Trigger a gathering write by writing two buffers.
                     ctx.write(Unpooled.wrappedBuffer(new byte[] { 'a' }));
-                    ChannelFuture f = ctx.write(Unpooled.wrappedBuffer(new byte[] { 'b' }));
-                    f.addListener((ChannelFutureListener) future -> {
+                    Future<Void> f = ctx.write(Unpooled.wrappedBuffer(new byte[] { 'b' }));
+                    f.addListener(future -> {
                         // This message must be flushed
                         ctx.writeAndFlush(Unpooled.wrappedBuffer(new byte[]{'c'}));
                     });
@@ -140,7 +143,7 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
                 }
             });
 
-            SocketAddress address = sb.bind(0).sync().channel().localAddress();
+            SocketAddress address = sb.bind(0).get().localAddress();
 
             Socket s = new Socket(NetUtil.LOCALHOST, ((InetSocketAddress) address).getPort());
 
@@ -157,7 +160,8 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
     }
 
     // Test for https://github.com/netty/netty/issues/4805
-    @Test(timeout = 3000)
+    @Test
+    @Timeout(value = 3000, unit = TimeUnit.MILLISECONDS)
     public void testChannelReRegisterReadSameEventLoop() throws Exception {
         final EventLoopGroup group = new MultithreadEventLoopGroup(2, NioHandler.newFactory());
         final CountDownLatch latch = new CountDownLatch(1);
@@ -179,8 +183,8 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
                      ChannelPipeline pipeline = ch.pipeline();
                      pipeline.addLast(new SimpleChannelInboundHandler<ByteBuf>() {
                          @Override
-                         protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) {
-                             // We was able to read something from the Channel after reregister.
+                         protected void messageReceived(ChannelHandlerContext ctx, ByteBuf byteBuf) {
+                             // We were able to read something from the Channel after re-register.
                              latch.countDown();
                          }
 
@@ -194,21 +198,18 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
                              // As soon as the channel becomes active re-register it to another
                              // EventLoop. After this is done we should still receive the data that
                              // was written to the channel.
-                             ctx.deregister().addListener((ChannelFutureListener) cf -> {
-                                 Channel channel = cf.channel();
-                                 channel.register();
-                             });
+                             ctx.deregister().addListener(ctx.channel(), (c, f) -> c.register());
                          }
                      });
                  }
              });
 
-            sc = b.bind(0).syncUninterruptibly().channel();
+            sc = b.bind(0).get();
 
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(group).channel(NioSocketChannel.class);
             bootstrap.handler(new ChannelHandler() { });
-            cc = bootstrap.connect(sc.localAddress()).syncUninterruptibly().channel();
+            cc = bootstrap.connect(sc.localAddress()).get();
             cc.writeAndFlush(Unpooled.wrappedBuffer(bytes)).syncUninterruptibly();
             latch.await();
         } finally {
@@ -222,8 +223,9 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
         }
     }
 
-    @Test(timeout = 3000)
-    public void testShutdownOutputAndClose() throws IOException {
+    @Test
+    @Timeout(value = 3000, unit = TimeUnit.MILLISECONDS)
+    public void testShutdownOutputAndClose() throws Exception {
         EventLoopGroup group = new MultithreadEventLoopGroup(1, NioHandler.newFactory());
         ServerSocket socket = new ServerSocket();
         socket.bind(new InetSocketAddress(0));
@@ -233,8 +235,7 @@ public class NioSocketChannelTest extends AbstractNioChannelTest<NioSocketChanne
             sb.group(group).channel(NioSocketChannel.class);
             sb.handler(new ChannelHandler() { });
 
-            SocketChannel channel = (SocketChannel) sb.connect(socket.getLocalSocketAddress())
-                    .syncUninterruptibly().channel();
+            SocketChannel channel = (SocketChannel) sb.connect(socket.getLocalSocketAddress()).get();
 
             accepted = socket.accept();
             channel.shutdownOutput().syncUninterruptibly();

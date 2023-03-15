@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,6 @@ import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
-import io.netty.util.internal.UnstableApi;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -35,7 +34,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * if multiple are returned by the {@link NameResolver}.
  * Use {@link #asAddressResolver()} to create a {@link InetSocketAddress} resolver
  */
-@UnstableApi
 public class RoundRobinInetAddressResolver extends InetNameResolver {
     private final NameResolver<InetAddress> nameResolver;
 
@@ -54,7 +52,7 @@ public class RoundRobinInetAddressResolver extends InetNameResolver {
         // hijack the doResolve request, but do a doResolveAll request under the hood.
         // Note that InetSocketAddress.getHostName() will never incur a reverse lookup here,
         // because an unresolved address always has a host name.
-        nameResolver.resolveAll(inetHost).addListener((FutureListener<List<InetAddress>>) future -> {
+        nameResolver.resolveAll(inetHost).addListener(future -> {
             if (future.isSuccess()) {
                 List<InetAddress> inetAddresses = future.getNow();
                 int numAddresses = inetAddresses.size();
@@ -73,7 +71,7 @@ public class RoundRobinInetAddressResolver extends InetNameResolver {
 
     @Override
     protected void doResolveAll(String inetHost, final Promise<List<InetAddress>> promise) throws Exception {
-        nameResolver.resolveAll(inetHost).addListener((FutureListener<List<InetAddress>>) future -> {
+        nameResolver.resolveAll(inetHost).addListener(future -> {
             if (future.isSuccess()) {
                 List<InetAddress> inetAddresses = future.getNow();
                 if (!inetAddresses.isEmpty()) {

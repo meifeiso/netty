@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,15 +18,17 @@ package io.netty.channel;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.util.concurrent.Future;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public abstract class AbstractEventLoopTest {
 
-    @Test(timeout = 5000)
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testShutdownGracefullyNoQuietPeriod() throws Exception {
         EventLoopGroup loop = newEventLoopGroup();
         ServerBootstrap b = new ServerBootstrap();
@@ -35,10 +37,10 @@ public abstract class AbstractEventLoopTest {
                 .childHandler(new ChannelHandler() { });
 
         // Not close the Channel to ensure the EventLoop is still shutdown in time.
-        b.bind(0).sync().channel();
+        b.bind(0).sync();
 
         Future<?> f = loop.shutdownGracefully(0, 1, TimeUnit.MINUTES);
-        assertTrue(loop.awaitTermination(2, TimeUnit.SECONDS));
+        assertTrue(loop.awaitTermination(600, TimeUnit.MILLISECONDS));
         assertTrue(f.syncUninterruptibly().isSuccess());
         assertTrue(loop.isShutdown());
         assertTrue(loop.isTerminated());

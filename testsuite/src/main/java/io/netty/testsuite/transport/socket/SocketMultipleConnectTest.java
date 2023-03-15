@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,23 +18,27 @@ package io.netty.testsuite.transport.socket;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.testsuite.transport.TestsuitePermutation;
 import io.netty.util.NetUtil;
-import org.junit.Test;
+import io.netty.util.concurrent.Future;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.nio.channels.AlreadyConnectedException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SocketMultipleConnectTest extends AbstractSocketTest {
 
-    @Test(timeout = 30000)
-    public void testMultipleConnect() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testMultipleConnect(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testMultipleConnect);
     }
 
     public void testMultipleConnect(ServerBootstrap sb, Bootstrap cb) throws Exception {
@@ -42,12 +46,12 @@ public class SocketMultipleConnectTest extends AbstractSocketTest {
         Channel cc = null;
         try {
             sb.childHandler(new ChannelHandler() { });
-            sc = sb.bind(NetUtil.LOCALHOST, 0).syncUninterruptibly().channel();
+            sc = sb.bind(NetUtil.LOCALHOST, 0).get();
 
             cb.handler(new ChannelHandler() { });
-            cc = cb.register().syncUninterruptibly().channel();
+            cc = cb.register().get();
             cc.connect(sc.localAddress()).syncUninterruptibly();
-            ChannelFuture connectFuture2 = cc.connect(sc.localAddress()).await();
+            Future<Void> connectFuture2 = cc.connect(sc.localAddress()).await();
             assertTrue(connectFuture2.cause() instanceof AlreadyConnectedException);
         } finally {
             if (cc != null) {
@@ -61,6 +65,6 @@ public class SocketMultipleConnectTest extends AbstractSocketTest {
 
     @Override
     protected List<TestsuitePermutation.BootstrapComboFactory<ServerBootstrap, Bootstrap>> newFactories() {
-        return new ArrayList<>(SocketTestPermutation.INSTANCE.socket());
+        return new ArrayList<>(SocketTestPermutation.INSTANCE.socketWithFastOpen());
     }
 }

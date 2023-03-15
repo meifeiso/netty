@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,27 +18,31 @@ package io.netty.channel.epoll;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.unix.DomainSocketReadMode;
 import io.netty.channel.unix.FileDescriptor;
+import io.netty.channel.unix.UnixChannelOption;
 import io.netty.testsuite.transport.TestsuitePermutation;
 import io.netty.testsuite.transport.socket.AbstractSocketTest;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class EpollDomainSocketFdTest extends AbstractSocketTest {
     @Override
     protected SocketAddress newSocketAddress() {
-        return EpollSocketTestPermutation.newSocketAddress();
+        return EpollSocketTestPermutation.newDomainSocketAddress();
     }
 
     @Override
@@ -46,9 +50,10 @@ public class EpollDomainSocketFdTest extends AbstractSocketTest {
         return EpollSocketTestPermutation.INSTANCE.domainSocket();
     }
 
-    @Test(timeout = 30000)
-    public void testSendRecvFd() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testSendRecvFd(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testSendRecvFd);
     }
 
     public void testSendRecvFd(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -57,10 +62,10 @@ public class EpollDomainSocketFdTest extends AbstractSocketTest {
             @Override
             public void channelActive(ChannelHandlerContext ctx) throws Exception {
                 // Create new channel and obtain a file descriptor from it.
-                final EpollDomainSocketChannel ch = new EpollDomainSocketChannel(ctx.channel().eventLoop());
+                final EpollDomainSocketChannel ch = new EpollDomainSocketChannel(ctx.channel().executor());
 
-                ctx.writeAndFlush(ch.fd()).addListener((ChannelFutureListener) future -> {
-                    if (!future.isSuccess()) {
+                ctx.writeAndFlush(ch.fd()).addListener(future -> {
+                    if (future.isFailed()) {
                         Throwable cause = future.cause();
                         queue.offer(cause);
                     }
@@ -80,10 +85,10 @@ public class EpollDomainSocketFdTest extends AbstractSocketTest {
                 ctx.close();
             }
         });
-        cb.option(EpollChannelOption.DOMAIN_SOCKET_READ_MODE,
-                DomainSocketReadMode.FILE_DESCRIPTORS);
-        Channel sc = sb.bind().sync().channel();
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
+        cb.option(UnixChannelOption.DOMAIN_SOCKET_READ_MODE,
+                  DomainSocketReadMode.FILE_DESCRIPTORS);
+        Channel sc = sb.bind().get();
+        Channel cc = cb.connect(sc.localAddress()).get();
 
         Object received = queue.take();
         cc.close().sync();
@@ -91,10 +96,10 @@ public class EpollDomainSocketFdTest extends AbstractSocketTest {
 
         if (received instanceof FileDescriptor) {
             FileDescriptor fd = (FileDescriptor) received;
-            Assert.assertTrue(fd.isOpen());
+            assertTrue(fd.isOpen());
             fd.close();
-            Assert.assertFalse(fd.isOpen());
-            Assert.assertNull(queue.poll());
+            assertFalse(fd.isOpen());
+            assertNull(queue.poll());
         } else {
             throw (Throwable) received;
         }

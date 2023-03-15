@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,28 +15,25 @@
  */
 package io.netty.handler.codec.http.websocketx;
 
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler.ClientHandshakeStateEvent;
 import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.FutureListener;
+import io.netty.util.concurrent.Promise;
 
 import java.util.concurrent.TimeUnit;
 
-import static io.netty.util.internal.ObjectUtil.*;
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 
-class WebSocketClientProtocolHandshakeHandler implements ChannelInboundHandler {
+class WebSocketClientProtocolHandshakeHandler implements ChannelHandler {
 
     private static final long DEFAULT_HANDSHAKE_TIMEOUT_MS = 10000L;
 
     private final WebSocketClientHandshaker handshaker;
     private final long handshakeTimeoutMillis;
     private ChannelHandlerContext ctx;
-    private ChannelPromise handshakePromise;
+    private Promise<Void> handshakePromise;
 
     WebSocketClientProtocolHandshakeHandler(WebSocketClientHandshaker handshaker) {
         this(handshaker, DEFAULT_HANDSHAKE_TIMEOUT_MS);
@@ -56,8 +53,8 @@ class WebSocketClientProtocolHandshakeHandler implements ChannelInboundHandler {
     @Override
     public void channelActive(final ChannelHandlerContext ctx) throws Exception {
         ctx.fireChannelActive();
-        handshaker.handshake(ctx.channel()).addListener((ChannelFutureListener) future -> {
-            if (!future.isSuccess()) {
+        handshaker.handshake(ctx.channel()).addListener(future -> {
+            if (future.isFailed()) {
                 handshakePromise.tryFailure(future.cause());
                 ctx.fireExceptionCaught(future.cause());
             } else {
@@ -66,6 +63,16 @@ class WebSocketClientProtocolHandshakeHandler implements ChannelInboundHandler {
             }
         });
         applyHandshakeTimeout();
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        if (!handshakePromise.isDone()) {
+            handshakePromise.tryFailure(new WebSocketClientHandshakeException("channel closed with handshake " +
+                                                                              "in progress"));
+        }
+
+        ctx.fireChannelInactive();
     }
 
     @Override
@@ -79,7 +86,7 @@ class WebSocketClientProtocolHandshakeHandler implements ChannelInboundHandler {
         try {
             if (!handshaker.isHandshakeComplete()) {
                 handshaker.finishHandshake(ctx.channel(), response);
-                handshakePromise.trySuccess();
+                handshakePromise.trySuccess(null);
                 ctx.fireUserEventTriggered(
                         WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE);
                 ctx.pipeline().remove(this);
@@ -92,33 +99,25 @@ class WebSocketClientProtocolHandshakeHandler implements ChannelInboundHandler {
     }
 
     private void applyHandshakeTimeout() {
-        final ChannelPromise localHandshakePromise = handshakePromise;
+        final Promise<Void> localHandshakePromise = handshakePromise;
         if (handshakeTimeoutMillis <= 0 || localHandshakePromise.isDone()) {
             return;
         }
 
-        final Future<?> timeoutFuture = ctx.executor().schedule(new Runnable() {
-            @Override
-            public void run() {
-                if (localHandshakePromise.isDone()) {
-                    return;
-                }
+        final Future<?> timeoutFuture = ctx.executor().schedule(() -> {
+            if (localHandshakePromise.isDone()) {
+                return;
+            }
 
-                if (localHandshakePromise.tryFailure(new WebSocketHandshakeException("handshake timed out"))) {
-                    ctx.flush()
-                       .fireUserEventTriggered(ClientHandshakeStateEvent.HANDSHAKE_TIMEOUT)
-                       .close();
-                }
+            if (localHandshakePromise.tryFailure(new WebSocketClientHandshakeException("handshake timed out"))) {
+                ctx.flush()
+                   .fireUserEventTriggered(ClientHandshakeStateEvent.HANDSHAKE_TIMEOUT)
+                   .close();
             }
         }, handshakeTimeoutMillis, TimeUnit.MILLISECONDS);
 
         // Cancel the handshake timeout when handshake is finished.
-        localHandshakePromise.addListener(new FutureListener<Void>() {
-            @Override
-            public void operationComplete(Future<Void> f) throws Exception {
-                timeoutFuture.cancel(false);
-            }
-        });
+        localHandshakePromise.addListener(f -> timeoutFuture.cancel(false));
     }
 
     /**
@@ -126,7 +125,7 @@ class WebSocketClientProtocolHandshakeHandler implements ChannelInboundHandler {
      *
      * @return current handshake future
      */
-    ChannelFuture getHandshakeFuture() {
+    Future<Void> getHandshakeFuture() {
         return handshakePromise;
     }
 }

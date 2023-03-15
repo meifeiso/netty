@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,25 +19,26 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.util.ReferenceCountUtil;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SocketExceptionHandlingTest extends AbstractSocketTest {
     @Test
-    public void testReadPendingIsResetAfterEachRead() throws Throwable {
-        run();
+    public void testReadPendingIsResetAfterEachRead(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testReadPendingIsResetAfterEachRead);
     }
 
     public void testReadPendingIsResetAfterEachRead(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -48,10 +49,10 @@ public class SocketExceptionHandlingTest extends AbstractSocketTest {
             sb.option(ChannelOption.SO_BACKLOG, 1024);
             sb.childHandler(serverInitializer);
 
-            serverChannel = sb.bind().syncUninterruptibly().channel();
+            serverChannel = sb.bind().get();
 
             cb.handler(new MyInitializer());
-            clientChannel = cb.connect(serverChannel.localAddress()).syncUninterruptibly().channel();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
 
             clientChannel.writeAndFlush(Unpooled.wrappedBuffer(new byte[1024]));
 
@@ -59,9 +60,9 @@ public class SocketExceptionHandlingTest extends AbstractSocketTest {
             assertTrue(serverInitializer.exceptionHandler.latch1.await(5, TimeUnit.SECONDS));
 
             // After we get the first exception, we should get no more, this is expected to timeout.
-            assertFalse("Encountered " + serverInitializer.exceptionHandler.count.get() +
-                            " exceptions when 1 was expected",
-                        serverInitializer.exceptionHandler.latch2.await(1, TimeUnit.SECONDS));
+            assertFalse(serverInitializer.exceptionHandler.latch2.await(1, TimeUnit.SECONDS),
+                "Encountered " + serverInitializer.exceptionHandler.count.get() +
+                                        " exceptions when 1 was expected");
         } finally {
             if (serverChannel != null) {
                 serverChannel.close().syncUninterruptibly();
@@ -83,7 +84,7 @@ public class SocketExceptionHandlingTest extends AbstractSocketTest {
         }
     }
 
-    private static class BuggyChannelHandler implements ChannelInboundHandler {
+    private static class BuggyChannelHandler implements ChannelHandler {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
             ReferenceCountUtil.release(msg);
@@ -91,7 +92,7 @@ public class SocketExceptionHandlingTest extends AbstractSocketTest {
         }
     }
 
-    private static class ExceptionHandler implements ChannelInboundHandler {
+    private static class ExceptionHandler implements ChannelHandler {
         final AtomicLong count = new AtomicLong();
         /**
          * We expect to get 1 call to {@link #exceptionCaught(ChannelHandlerContext, Throwable)}.

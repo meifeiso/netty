@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,9 +22,10 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalHandler;
 import io.netty.channel.local.LocalServerChannel;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.nio.channels.ClosedChannelException;
 import java.util.Iterator;
@@ -34,10 +35,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertSame;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ChannelInitializerTest {
     private static final int TIMEOUT_MILLIS = 1000;
@@ -47,7 +48,7 @@ public class ChannelInitializerTest {
     private Bootstrap client;
     private InspectableHandler testHandler;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         group = new MultithreadEventLoopGroup(1, LocalHandler.newFactory());
         server = new ServerBootstrap()
@@ -61,7 +62,7 @@ public class ChannelInitializerTest {
         testHandler = new InspectableHandler();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         group.shutdownGracefully(0, TIMEOUT_MILLIS, TimeUnit.MILLISECONDS).syncUninterruptibly();
     }
@@ -108,7 +109,7 @@ public class ChannelInitializerTest {
     }
 
     @Test
-    public void testChannelInitializerInInitializerCorrectOrdering() {
+    public void testChannelInitializerInInitializerCorrectOrdering() throws Exception {
         final ChannelHandler handler1 = new ChannelHandler() { };
         final ChannelHandler handler2 = new ChannelHandler() { };
         final ChannelHandler handler3 = new ChannelHandler() { };
@@ -129,11 +130,11 @@ public class ChannelInitializerTest {
             }
         }).localAddress(LocalAddress.ANY);
 
-        Channel channel = client.bind().syncUninterruptibly().channel();
+        Channel channel = client.bind().get();
         try {
             // Execute some task on the EventLoop and wait until its done to be sure all handlers are added to the
             // pipeline.
-            channel.eventLoop().submit(() -> {
+            channel.executor().submit(() -> {
                 // NOOP
             }).syncUninterruptibly();
             Iterator<Map.Entry<String, ChannelHandler>> handlers = channel.pipeline().iterator();
@@ -148,7 +149,7 @@ public class ChannelInitializerTest {
     }
 
     @Test
-    public void testChannelInitializerReentrance() {
+    public void testChannelInitializerReentrance() throws Exception {
         final AtomicInteger registeredCalled = new AtomicInteger(0);
         final ChannelHandler handler1 = new ChannelHandler() {
             @Override
@@ -166,11 +167,11 @@ public class ChannelInitializerTest {
             }
         }).localAddress(LocalAddress.ANY);
 
-        Channel channel = client.bind().syncUninterruptibly().channel();
+        Channel channel = client.bind().get();
         try {
             // Execute some task on the EventLoop and wait until its done to be sure all handlers are added to the
             // pipeline.
-            channel.eventLoop().submit(() -> {
+            channel.executor().submit(() -> {
                 // NOOP
             }).syncUninterruptibly();
             assertEquals(1, initChannelCalled.get());
@@ -180,8 +181,9 @@ public class ChannelInitializerTest {
         }
     }
 
-    @Test(timeout = TIMEOUT_MILLIS)
-    public void firstHandlerInPipelineShouldReceiveChannelRegisteredEvent() {
+    @Test
+    @Timeout(value = TIMEOUT_MILLIS, unit = TimeUnit.MILLISECONDS)
+    public void firstHandlerInPipelineShouldReceiveChannelRegisteredEvent() throws Exception {
         testChannelRegisteredEventPropagation(new ChannelInitializer<LocalChannel>() {
             @Override
             public void initChannel(LocalChannel channel) {
@@ -190,8 +192,9 @@ public class ChannelInitializerTest {
         });
     }
 
-    @Test(timeout = TIMEOUT_MILLIS)
-    public void lastHandlerInPipelineShouldReceiveChannelRegisteredEvent() {
+    @Test
+    @Timeout(value = TIMEOUT_MILLIS, unit = TimeUnit.MILLISECONDS)
+    public void lastHandlerInPipelineShouldReceiveChannelRegisteredEvent() throws Exception {
         testChannelRegisteredEventPropagation(new ChannelInitializer<LocalChannel>() {
             @Override
             public void initChannel(LocalChannel channel) {
@@ -232,12 +235,12 @@ public class ChannelInitializerTest {
         assertTrue(called.get());
     }
 
-    private void testChannelRegisteredEventPropagation(ChannelInitializer<LocalChannel> init) {
+    private void testChannelRegisteredEventPropagation(ChannelInitializer<LocalChannel> init) throws Exception {
         Channel clientChannel = null, serverChannel = null;
         try {
             server.childHandler(init);
-            serverChannel = server.bind().syncUninterruptibly().channel();
-            clientChannel = client.connect(SERVER_ADDRESS).syncUninterruptibly().channel();
+            serverChannel = server.bind().get();
+            clientChannel = client.connect(SERVER_ADDRESS).get();
             assertEquals(1, testHandler.channelRegisteredCount.get());
         } finally {
             closeChannel(clientChannel);
@@ -251,7 +254,7 @@ public class ChannelInitializerTest {
         }
     }
 
-    private static final class InspectableHandler extends ChannelDuplexHandler {
+    private static final class InspectableHandler implements ChannelHandler {
         final AtomicInteger channelRegisteredCount = new AtomicInteger(0);
 
         @Override

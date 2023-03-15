@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,13 +18,11 @@ package io.netty.handler.codec.http2;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.util.ReferenceCounted;
-
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.UnstableApi;
 
 import java.util.ArrayDeque;
@@ -120,10 +118,11 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
 
     @Override
     public final void handlerAdded0(ChannelHandlerContext ctx) throws Exception {
-        if (ctx.executor() != ctx.channel().eventLoop()) {
+        if (ctx.executor() != ctx.channel().executor()) {
             throw new IllegalStateException("EventExecutor must be EventLoop of Channel");
         }
         this.ctx = ctx;
+        super.handlerAdded0(ctx);
     }
 
     @Override
@@ -177,11 +176,11 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
                     streamChannel = new Http2MultiplexCodecStreamChannel(stream, inboundStreamHandler);
                 }
 
-                ChannelFuture future = streamChannel.register();
+                Future<Void> future = streamChannel.register();
                 if (future.isDone()) {
-                    Http2MultiplexHandler.registerDone(future);
+                    Http2MultiplexHandler.registerDone(streamChannel, future);
                 } else {
-                    future.addListener(Http2MultiplexHandler.CHILD_CHANNEL_REGISTRATION_LISTENER);
+                    future.addListener(streamChannel, Http2MultiplexHandler.CHILD_CHANNEL_REGISTRATION_LISTENER);
                 }
                 break;
             case CLOSED:
@@ -214,6 +213,11 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
     }
 
     private void onHttp2GoAwayFrame(ChannelHandlerContext ctx, final Http2GoAwayFrame goAwayFrame) {
+        if (goAwayFrame.lastStreamId() == Integer.MAX_VALUE) {
+            // None of the streams can have an id greater than Integer.MAX_VALUE
+            return;
+        }
+        // Notify which streams were not processed by the remote peer and are safe to retry on another connection:
         try {
             forEachActiveStream(stream -> {
                 final int streamId = stream.id();
@@ -273,7 +277,7 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
             forEachActiveStream(AbstractHttp2StreamChannel.WRITABLE_VISITOR);
         }
 
-        ctx.fireChannelWritabilityChanged();
+        super.channelWritabilityChanged(ctx);
     }
 
     final void flush0(ChannelHandlerContext ctx) {
@@ -306,10 +310,8 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
         }
 
         @Override
-        protected ChannelFuture write0(ChannelHandlerContext ctx, Object msg) {
-            ChannelPromise promise = ctx.newPromise();
-            Http2MultiplexCodec.this.write(ctx, msg, promise);
-            return promise;
+        protected Future<Void> write0(ChannelHandlerContext ctx, Object msg) {
+            return Http2MultiplexCodec.this.write(ctx, msg);
         }
 
         @Override

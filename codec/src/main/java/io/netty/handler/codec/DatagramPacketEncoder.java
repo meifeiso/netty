@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,20 +15,20 @@
  */
 package io.netty.handler.codec;
 
-import static java.util.Objects.requireNonNull;
-
-import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufConvertible;
 import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.protobuf.ProtobufEncoder;
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.StringUtil;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.List;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * An encoder that encodes the content in {@link AddressedEnvelope} to {@link DatagramPacket} using
@@ -81,9 +81,9 @@ public class DatagramPacketEncoder<M> extends MessageToMessageEncoder<AddressedE
                     StringUtil.simpleClassName(encoder) + " must produce only one message.");
         }
         Object content = out.get(0);
-        if (content instanceof ByteBuf) {
+        if (content instanceof ByteBufConvertible) {
             // Replace the ByteBuf with a DatagramPacket.
-            out.set(0, new DatagramPacket((ByteBuf) content, msg.recipient(), msg.sender()));
+            out.set(0, new DatagramPacket(((ByteBufConvertible) content).asByteBuf(), msg.recipient(), msg.sender()));
         } else {
             throw new EncoderException(
                     StringUtil.simpleClassName(encoder) + " must produce only ByteBuf.");
@@ -91,39 +91,39 @@ public class DatagramPacketEncoder<M> extends MessageToMessageEncoder<AddressedE
     }
 
     @Override
-    public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) throws Exception {
-        encoder.bind(ctx, localAddress, promise);
+    public Future<Void> bind(ChannelHandlerContext ctx, SocketAddress localAddress) {
+        return encoder.bind(ctx, localAddress);
     }
 
     @Override
-    public void connect(
+    public Future<Void> connect(
             ChannelHandlerContext ctx, SocketAddress remoteAddress,
-            SocketAddress localAddress, ChannelPromise promise) throws Exception {
-        encoder.connect(ctx, remoteAddress, localAddress, promise);
+            SocketAddress localAddress) {
+        return encoder.connect(ctx, remoteAddress, localAddress);
     }
 
     @Override
-    public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        encoder.disconnect(ctx, promise);
+    public Future<Void> disconnect(ChannelHandlerContext ctx) {
+        return encoder.disconnect(ctx);
     }
 
     @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        encoder.close(ctx, promise);
+    public Future<Void> close(ChannelHandlerContext ctx) {
+        return encoder.close(ctx);
     }
 
     @Override
-    public void deregister(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        encoder.deregister(ctx, promise);
+    public Future<Void> deregister(ChannelHandlerContext ctx) {
+        return encoder.deregister(ctx);
     }
 
     @Override
-    public void read(ChannelHandlerContext ctx) throws Exception {
+    public void read(ChannelHandlerContext ctx) {
         encoder.read(ctx);
     }
 
     @Override
-    public void flush(ChannelHandlerContext ctx) throws Exception {
+    public void flush(ChannelHandlerContext ctx) {
         encoder.flush(ctx);
     }
 

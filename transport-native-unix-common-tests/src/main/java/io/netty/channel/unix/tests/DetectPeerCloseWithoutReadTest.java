@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,7 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
@@ -28,31 +28,34 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.SimpleChannelInboundHandler;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.net.InetSocketAddress;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public abstract class DetectPeerCloseWithoutReadTest {
     protected abstract EventLoopGroup newGroup();
     protected abstract Class<? extends ServerChannel> serverChannel();
     protected abstract Class<? extends Channel> clientChannel();
 
-    @Test(timeout = 10000)
-    public void clientCloseWithoutServerReadIsDetectedNoExtraReadRequested() throws InterruptedException {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void clientCloseWithoutServerReadIsDetectedNoExtraReadRequested() throws Exception {
         clientCloseWithoutServerReadIsDetected0(false);
     }
 
-    @Test(timeout = 10000)
-    public void clientCloseWithoutServerReadIsDetectedExtraReadRequested() throws InterruptedException {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void clientCloseWithoutServerReadIsDetectedExtraReadRequested() throws Exception {
         clientCloseWithoutServerReadIsDetected0(true);
     }
 
-    private void clientCloseWithoutServerReadIsDetected0(final boolean extraReadRequested)
-            throws InterruptedException {
+    private void clientCloseWithoutServerReadIsDetected0(final boolean extraReadRequested) throws Exception {
         EventLoopGroup serverGroup = null;
         EventLoopGroup clientGroup = null;
         Channel serverChannel = null;
@@ -77,16 +80,16 @@ public abstract class DetectPeerCloseWithoutReadTest {
                 }
             });
 
-            serverChannel = sb.bind(new InetSocketAddress(0)).syncUninterruptibly().channel();
+            serverChannel = sb.bind(new InetSocketAddress(0)).get();
 
             Bootstrap cb = new Bootstrap();
             cb.group(serverGroup);
             cb.channel(clientChannel());
             cb.handler(new ChannelHandler() { });
-            Channel clientChannel = cb.connect(serverChannel.localAddress()).syncUninterruptibly().channel();
+            Channel clientChannel = cb.connect(serverChannel.localAddress()).get();
             ByteBuf buf = clientChannel.alloc().buffer(expectedBytes);
             buf.writerIndex(buf.writerIndex() + expectedBytes);
-            clientChannel.writeAndFlush(buf).addListener(ChannelFutureListener.CLOSE);
+            clientChannel.writeAndFlush(buf).addListener(clientChannel, ChannelFutureListeners.CLOSE);
 
             latch.await();
             assertEquals(expectedBytes, bytesRead.get());
@@ -103,17 +106,19 @@ public abstract class DetectPeerCloseWithoutReadTest {
         }
     }
 
-    @Test(timeout = 10000)
-    public void serverCloseWithoutClientReadIsDetectedNoExtraReadRequested() throws InterruptedException {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void serverCloseWithoutClientReadIsDetectedNoExtraReadRequested() throws Exception {
         serverCloseWithoutClientReadIsDetected0(false);
     }
 
-    @Test(timeout = 10000)
-    public void serverCloseWithoutClientReadIsDetectedExtraReadRequested() throws InterruptedException {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void serverCloseWithoutClientReadIsDetectedExtraReadRequested() throws Exception {
         serverCloseWithoutClientReadIsDetected0(true);
     }
 
-    private void serverCloseWithoutClientReadIsDetected0(final boolean extraReadRequested) throws InterruptedException {
+    private void serverCloseWithoutClientReadIsDetected0(final boolean extraReadRequested) throws Exception {
         EventLoopGroup serverGroup = null;
         EventLoopGroup clientGroup = null;
         Channel serverChannel = null;
@@ -135,14 +140,14 @@ public abstract class DetectPeerCloseWithoutReadTest {
                         public void channelActive(ChannelHandlerContext ctx) {
                             ByteBuf buf = ctx.alloc().buffer(expectedBytes);
                             buf.writerIndex(buf.writerIndex() + expectedBytes);
-                            ctx.writeAndFlush(buf).addListener(ChannelFutureListener.CLOSE);
+                            ctx.writeAndFlush(buf).addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
                             ctx.fireChannelActive();
                         }
                     });
                 }
             });
 
-            serverChannel = sb.bind(new InetSocketAddress(0)).syncUninterruptibly().channel();
+            serverChannel = sb.bind(new InetSocketAddress(0)).get();
 
             Bootstrap cb = new Bootstrap();
             cb.group(serverGroup);
@@ -158,7 +163,7 @@ public abstract class DetectPeerCloseWithoutReadTest {
                     ch.pipeline().addLast(new TestHandler(bytesRead, extraReadRequested, latch));
                 }
             });
-            clientChannel = cb.connect(serverChannel.localAddress()).syncUninterruptibly().channel();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
 
             latch.await();
             assertEquals(expectedBytes, bytesRead.get());
@@ -190,7 +195,7 @@ public abstract class DetectPeerCloseWithoutReadTest {
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
+        protected void messageReceived(ChannelHandlerContext ctx, ByteBuf msg) {
             bytesRead.addAndGet(msg.readableBytes());
 
             if (extraReadRequested) {

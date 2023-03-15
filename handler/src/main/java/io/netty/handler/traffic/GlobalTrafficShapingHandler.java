@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,14 +15,12 @@
  */
 package io.netty.handler.traffic;
 
-import static java.util.Objects.requireNonNull;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandler.Sharable;
+import io.netty.buffer.ByteBufConvertible;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Promise;
 
 import java.util.ArrayDeque;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +28,8 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * <p>This implementation of the {@link AbstractTrafficShapingHandler} is for global
@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * </li>
  * <li>In your handler, you should consider to use the {@code channel.isWritable()} and
  * {@code channelWritabilityChanged(ctx)} to handle writability, or through
- * {@code future.addListener(new GenericFutureListener())} on the future returned by
+ * {@code future.addListener(future -> ...)} on the future returned by
  * {@code ctx.write()}.</li>
  * <li><p>You shall also consider to have object size in read or write operations relatively adapted to
  * the bandwidth you required: for instance having 10 MB objects for 10KB/s will lead to burst effect,
@@ -272,13 +272,13 @@ public class GlobalTrafficShapingHandler extends AbstractTrafficShapingHandler {
                         trafficCounter.bytesRealWriteFlowControl(size);
                         perChannel.queueSize -= size;
                         queuesSize.addAndGet(-size);
-                        ctx.write(toSend.toSend, toSend.promise);
+                        ctx.write(toSend.toSend).cascadeTo(toSend.promise);
                     }
                 } else {
                     queuesSize.addAndGet(-perChannel.queueSize);
                     for (ToSend toSend : perChannel.messagesQueue) {
-                        if (toSend.toSend instanceof ByteBuf) {
-                            ((ByteBuf) toSend.toSend).release();
+                        if (toSend.toSend instanceof ByteBufConvertible) {
+                            ((ByteBufConvertible) toSend.toSend).asByteBuf().release();
                         }
                     }
                 }
@@ -315,9 +315,9 @@ public class GlobalTrafficShapingHandler extends AbstractTrafficShapingHandler {
         final long relativeTimeAction;
         final Object toSend;
         final long size;
-        final ChannelPromise promise;
+        final Promise<Void> promise;
 
-        private ToSend(final long delay, final Object toSend, final long size, final ChannelPromise promise) {
+        private ToSend(final long delay, final Object toSend, final long size, final Promise<Void> promise) {
             relativeTimeAction = delay;
             this.toSend = toSend;
             this.size = size;
@@ -328,7 +328,7 @@ public class GlobalTrafficShapingHandler extends AbstractTrafficShapingHandler {
     @Override
     void submitWrite(final ChannelHandlerContext ctx, final Object msg,
             final long size, final long writedelay, final long now,
-            final ChannelPromise promise) {
+            final Promise<Void> promise) {
         Channel channel = ctx.channel();
         Integer key = channel.hashCode();
         PerChannel perChannel = channelQueues.get(key);
@@ -344,7 +344,7 @@ public class GlobalTrafficShapingHandler extends AbstractTrafficShapingHandler {
         synchronized (perChannel) {
             if (writedelay == 0 && perChannel.messagesQueue.isEmpty()) {
                 trafficCounter.bytesRealWriteFlowControl(size);
-                ctx.write(msg, promise);
+                ctx.write(msg).cascadeTo(promise);
                 perChannel.lastWriteTimestamp = now;
                 return;
             }
@@ -378,7 +378,7 @@ public class GlobalTrafficShapingHandler extends AbstractTrafficShapingHandler {
                     trafficCounter.bytesRealWriteFlowControl(size);
                     perChannel.queueSize -= size;
                     queuesSize.addAndGet(-size);
-                    ctx.write(newToSend.toSend, newToSend.promise);
+                    ctx.write(newToSend.toSend).cascadeTo(newToSend.promise);
                     perChannel.lastWriteTimestamp = now;
                 } else {
                     perChannel.messagesQueue.addFirst(newToSend);

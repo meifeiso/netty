@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -73,7 +73,7 @@ public final class NioHandler implements IoHandler {
     // Workaround for JDK NIO bug.
     //
     // See:
-    // - http://bugs.sun.com/view_bug.do?bug_id=6427854
+    // - https://bugs.java.com/view_bug.do?bug_id=6427854
     // - https://github.com/netty/netty/issues/203
     static {
         final String key = "sun.nio.ch.bugLevel";
@@ -329,7 +329,7 @@ public final class NioHandler implements IoHandler {
                 logger.warn("Failed to re-register a Channel to the new Selector.", e);
                 if (a instanceof AbstractNioChannel) {
                     AbstractNioChannel ch = (AbstractNioChannel) a;
-                    ch.unsafe().close(ch.unsafe().voidPromise());
+                    ch.unsafe().close(ch.newPromise());
                 } else {
                     @SuppressWarnings("unchecked")
                     NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
@@ -451,6 +451,8 @@ public final class NioHandler implements IoHandler {
             cancelledKeys = 0;
             needsToSelectAgain = false;
             handled = processSelectedKeys();
+        } catch (Error e) {
+            throw e;
         } catch (Throwable t) {
             handleLoopException(t);
         }
@@ -571,7 +573,7 @@ public final class NioHandler implements IoHandler {
         if (!k.isValid()) {
 
             // close the channel if the key is not valid anymore
-            unsafe.close(unsafe.voidPromise());
+            unsafe.close(ch.newPromise());
             return;
         }
 
@@ -601,7 +603,7 @@ public final class NioHandler implements IoHandler {
                 unsafe.read();
             }
         } catch (CancelledKeyException ignored) {
-            unsafe.close(unsafe.voidPromise());
+            unsafe.close(ch.newPromise());
         }
     }
 
@@ -625,6 +627,8 @@ public final class NioHandler implements IoHandler {
                     invokeChannelUnregistered(task, k, null);
                 }
                 break;
+            default:
+                 break;
             }
         }
     }
@@ -647,7 +651,7 @@ public final class NioHandler implements IoHandler {
         }
 
         for (AbstractNioChannel ch: channels) {
-            ch.unsafe().close(ch.unsafe().voidPromise());
+            ch.unsafe().close(ch.newPromise());
         }
     }
 

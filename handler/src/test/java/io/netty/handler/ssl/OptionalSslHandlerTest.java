@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,16 +20,17 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.MockitoAnnotations;
 
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.when;
 
-@RunWith(MockitoJUnitRunner.class)
 public class OptionalSslHandlerTest {
 
     private static final String SSL_HANDLER_NAME = "sslhandler";
@@ -44,8 +45,9 @@ public class OptionalSslHandlerTest {
     @Mock
     private ChannelPipeline pipeline;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
+        MockitoAnnotations.initMocks(this);
         when(context.pipeline()).thenReturn(pipeline);
     }
 
@@ -54,7 +56,7 @@ public class OptionalSslHandlerTest {
         OptionalSslHandler handler = new OptionalSslHandler(sslContext);
         final ByteBuf payload = Unpooled.copiedBuffer("plaintext".getBytes());
         try {
-            handler.decode(context, payload, null);
+            handler.decode(context, payload);
             verify(pipeline).remove(handler);
         } finally {
             payload.release();
@@ -77,7 +79,7 @@ public class OptionalSslHandlerTest {
         };
         final ByteBuf payload = Unpooled.copiedBuffer("plaintext".getBytes());
         try {
-            handler.decode(context, payload, null);
+            handler.decode(context, payload);
             verify(pipeline).replace(handler, HANDLER_NAME, nonSslHandler);
         } finally {
             payload.release();
@@ -100,7 +102,7 @@ public class OptionalSslHandlerTest {
         };
         final ByteBuf payload = Unpooled.wrappedBuffer(new byte[] { 22, 3, 1, 0, 5 });
         try {
-            handler.decode(context, payload, null);
+            handler.decode(context, payload);
             verify(pipeline).replace(handler, SSL_HANDLER_NAME, sslHandler);
         } finally {
             payload.release();
@@ -112,7 +114,7 @@ public class OptionalSslHandlerTest {
         OptionalSslHandler handler = new OptionalSslHandler(sslContext);
         final ByteBuf payload = Unpooled.wrappedBuffer(new byte[] { 22, 3 });
         try {
-            handler.decode(context, payload, null);
+            handler.decode(context, payload);
             verifyZeroInteractions(pipeline);
         } finally {
             payload.release();

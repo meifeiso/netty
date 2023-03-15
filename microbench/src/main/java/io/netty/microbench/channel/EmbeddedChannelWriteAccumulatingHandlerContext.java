@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -14,19 +14,18 @@
  */
 package io.netty.microbench.channel;
 
-import static java.util.Objects.requireNonNull;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.util.concurrent.Future;
+
+import static java.util.Objects.requireNonNull;
 
 public abstract class EmbeddedChannelWriteAccumulatingHandlerContext extends EmbeddedChannelHandlerContext {
     private ByteBuf cumulation;
-    private ByteToMessageDecoder.Cumulator cumulator;
+    private final ByteToMessageDecoder.Cumulator cumulator;
 
     protected EmbeddedChannelWriteAccumulatingHandlerContext(ByteBufAllocator alloc, ChannelHandler handler,
                                                           ByteToMessageDecoder.Cumulator writeCumulator) {
@@ -37,7 +36,7 @@ public abstract class EmbeddedChannelWriteAccumulatingHandlerContext extends Emb
                                                           ByteToMessageDecoder.Cumulator writeCumulator,
                                                           EmbeddedChannel channel) {
         super(alloc, handler, channel);
-        this.cumulator = requireNonNull(writeCumulator, "writeCumulator");
+        cumulator = requireNonNull(writeCumulator, "writeCumulator");
     }
 
     public final ByteBuf cumulation() {
@@ -52,12 +51,7 @@ public abstract class EmbeddedChannelWriteAccumulatingHandlerContext extends Emb
     }
 
     @Override
-    public final ChannelFuture write(Object msg) {
-        return write(msg, newPromise());
-    }
-
-    @Override
-    public final ChannelFuture write(Object msg, ChannelPromise promise) {
+    public final Future<Void> write(Object msg) {
         try {
             if (msg instanceof ByteBuf) {
                 if (cumulation == null) {
@@ -65,19 +59,17 @@ public abstract class EmbeddedChannelWriteAccumulatingHandlerContext extends Emb
                 } else {
                     cumulation = cumulator.cumulate(alloc(), cumulation, (ByteBuf) msg);
                 }
-                promise.setSuccess();
-            } else {
-                channel().write(msg, promise);
+                return channel().newSucceededFuture();
             }
+            return channel().write(msg);
         } catch (Exception e) {
-            promise.setFailure(e);
             handleException(e);
+            return channel().newFailedFuture(e);
         }
-        return promise;
     }
 
     @Override
-    public final ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
+    public final Future<Void> writeAndFlush(Object msg) {
         try {
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
@@ -86,19 +78,13 @@ public abstract class EmbeddedChannelWriteAccumulatingHandlerContext extends Emb
                 } else {
                     cumulation = cumulator.cumulate(alloc(), cumulation, buf);
                 }
-                promise.setSuccess();
+                return channel().newSucceededFuture();
             } else {
-                channel().writeAndFlush(msg, promise);
+                return channel().writeAndFlush(msg);
             }
         } catch (Exception e) {
-            promise.setFailure(e);
             handleException(e);
+            return channel().newFailedFuture(e);
         }
-        return promise;
-    }
-
-    @Override
-    public final ChannelFuture writeAndFlush(Object msg) {
-        return writeAndFlush(msg, newPromise());
     }
 }

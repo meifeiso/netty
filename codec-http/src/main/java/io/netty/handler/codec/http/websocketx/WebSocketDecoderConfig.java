@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,18 +15,22 @@
  */
 package io.netty.handler.codec.http.websocketx;
 
-import io.netty.util.internal.ObjectUtil;
+import java.util.Objects;
 
 /**
  * Frames decoder configuration.
  */
 public final class WebSocketDecoderConfig {
 
+    static final WebSocketDecoderConfig DEFAULT =
+        new WebSocketDecoderConfig(65536, true, false, false, true, true);
+
     private final int maxFramePayloadLength;
     private final boolean expectMaskedFrames;
     private final boolean allowMaskMismatch;
     private final boolean allowExtensions;
     private final boolean closeOnProtocolViolation;
+    private final boolean withUTF8Validator;
 
     /**
      * Constructor
@@ -44,14 +48,20 @@ public final class WebSocketDecoderConfig {
      *            Flag to allow reserved extension bits to be used or not
      * @param closeOnProtocolViolation
      *            Flag to send close frame immediately on any protocol violation.ion.
+     * @param withUTF8Validator
+     *            Allows you to avoid adding of Utf8FrameValidator to the pipeline on the
+     *            WebSocketServerProtocolHandler creation. This is useful (less overhead)
+     *            when you use only BinaryWebSocketFrame within your web socket connection.
      */
     private WebSocketDecoderConfig(int maxFramePayloadLength, boolean expectMaskedFrames, boolean allowMaskMismatch,
-                                  boolean allowExtensions, boolean closeOnProtocolViolation) {
+                                  boolean allowExtensions, boolean closeOnProtocolViolation,
+                                  boolean withUTF8Validator) {
         this.maxFramePayloadLength = maxFramePayloadLength;
         this.expectMaskedFrames = expectMaskedFrames;
         this.allowMaskMismatch = allowMaskMismatch;
         this.allowExtensions = allowExtensions;
         this.closeOnProtocolViolation = closeOnProtocolViolation;
+        this.withUTF8Validator = withUTF8Validator;
     }
 
     public int maxFramePayloadLength() {
@@ -74,6 +84,10 @@ public final class WebSocketDecoderConfig {
         return closeOnProtocolViolation;
     }
 
+    public boolean withUTF8Validator() {
+        return withUTF8Validator;
+    }
+
     @Override
     public String toString() {
         return "WebSocketDecoderConfig" +
@@ -82,6 +96,7 @@ public final class WebSocketDecoderConfig {
             ", allowMaskMismatch=" + allowMaskMismatch +
             ", allowExtensions=" + allowExtensions +
             ", closeOnProtocolViolation=" + closeOnProtocolViolation +
+            ", withUTF8Validator=" + withUTF8Validator +
             "]";
     }
 
@@ -90,27 +105,25 @@ public final class WebSocketDecoderConfig {
     }
 
     public static Builder newBuilder() {
-        return new Builder();
+        return new Builder(DEFAULT);
     }
 
     public static final class Builder {
-        private int maxFramePayloadLength = 65536;
-        private boolean expectMaskedFrames = true;
+        private int maxFramePayloadLength;
+        private boolean expectMaskedFrames;
         private boolean allowMaskMismatch;
         private boolean allowExtensions;
-        private boolean closeOnProtocolViolation = true;
-
-        private Builder() {
-            /* No-op */
-        }
+        private boolean closeOnProtocolViolation;
+        private boolean withUTF8Validator;
 
         private Builder(WebSocketDecoderConfig decoderConfig) {
-            ObjectUtil.checkNotNull(decoderConfig, "decoderConfig");
+            Objects.requireNonNull(decoderConfig, "decoderConfig");
             maxFramePayloadLength = decoderConfig.maxFramePayloadLength();
             expectMaskedFrames = decoderConfig.expectMaskedFrames();
             allowMaskMismatch = decoderConfig.allowMaskMismatch();
             allowExtensions = decoderConfig.allowExtensions();
             closeOnProtocolViolation = decoderConfig.closeOnProtocolViolation();
+            withUTF8Validator = decoderConfig.withUTF8Validator();
         }
 
         public Builder maxFramePayloadLength(int maxFramePayloadLength) {
@@ -138,10 +151,15 @@ public final class WebSocketDecoderConfig {
             return this;
         }
 
+        public Builder withUTF8Validator(boolean withUTF8Validator) {
+            this.withUTF8Validator = withUTF8Validator;
+            return this;
+        }
+
         public WebSocketDecoderConfig build() {
             return new WebSocketDecoderConfig(
-                maxFramePayloadLength, expectMaskedFrames, allowMaskMismatch,
-                allowExtensions, closeOnProtocolViolation);
+                    maxFramePayloadLength, expectMaskedFrames, allowMaskMismatch,
+                    allowExtensions, closeOnProtocolViolation, withUTF8Validator);
         }
     }
 }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -31,14 +31,17 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.FutureListener;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class RenegotiateTest {
 
-    @Test(timeout = 30000)
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
     public void testRenegotiateServer() throws Throwable {
         final AtomicReference<Throwable> error = new AtomicReference<>();
         final CountDownLatch latch = new CountDownLatch(2);
@@ -46,24 +49,30 @@ public abstract class RenegotiateTest {
         EventLoopGroup group = new MultithreadEventLoopGroup(LocalHandler.newFactory());
         try {
             final SslContext context = SslContextBuilder.forServer(cert.key(), cert.cert())
-                    .sslProvider(serverSslProvider()).build();
+                    .sslProvider(serverSslProvider())
+                    .protocols(SslProtocols.TLS_v1_2)
+                    .build();
+
             ServerBootstrap sb = new ServerBootstrap();
             sb.group(group).channel(LocalServerChannel.class)
-                    .childHandler(new ChannelInitializer<Channel>() {
+                    .childHandler(new ChannelInitializer<>() {
                         @Override
-                        protected void initChannel(Channel ch) throws Exception {
-                            ch.pipeline().addLast(context.newHandler(ch.alloc()));
+                        protected void initChannel(Channel ch) {
+                            SslHandler handler = context.newHandler(ch.alloc());
+                            handler.setHandshakeTimeoutMillis(0);
+                            ch.pipeline().addLast(handler);
                             ch.pipeline().addLast(new ChannelHandler() {
+
                                 private boolean renegotiate;
 
                                 @Override
-                                public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+                                public void channelRead(ChannelHandlerContext ctx, Object msg) {
                                     ReferenceCountUtil.release(msg);
                                 }
 
                                 @Override
                                 public void userEventTriggered(
-                                        final ChannelHandlerContext ctx, Object evt) throws Exception {
+                                        final ChannelHandlerContext ctx, Object evt) {
                                     if (!renegotiate && evt instanceof SslHandshakeCompletionEvent) {
                                         SslHandshakeCompletionEvent event = (SslHandshakeCompletionEvent) evt;
 
@@ -72,11 +81,11 @@ public abstract class RenegotiateTest {
 
                                             renegotiate = true;
                                             handler.renegotiate().addListener((FutureListener<Channel>) future -> {
-                                                if (!future.isSuccess()) {
+                                                if (future.isFailed()) {
                                                     error.compareAndSet(null, future.cause());
-                                                    latch.countDown();
                                                     ctx.close();
                                                 }
+                                                latch.countDown();
                                             });
                                         } else {
                                             error.compareAndSet(null, event.cause());
@@ -89,21 +98,26 @@ public abstract class RenegotiateTest {
                             });
                         }
                     });
-            Channel channel = sb.bind(new LocalAddress("test")).syncUninterruptibly().channel();
+            Channel channel = sb.bind(new LocalAddress("test")).get();
 
             final SslContext clientContext = SslContextBuilder.forClient()
-                    .trustManager(InsecureTrustManagerFactory.INSTANCE).sslProvider(SslProvider.JDK).build();
+                    .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                    .sslProvider(SslProvider.JDK)
+                    .protocols(SslProtocols.TLS_v1_2)
+                    .build();
 
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(group).channel(LocalChannel.class)
-                    .handler(new ChannelInitializer<Channel>() {
+                    .handler(new ChannelInitializer<>() {
                         @Override
-                        protected void initChannel(Channel ch) throws Exception {
-                            ch.pipeline().addLast(clientContext.newHandler(ch.alloc()));
+                        protected void initChannel(Channel ch) {
+                            SslHandler handler = clientContext.newHandler(ch.alloc());
+                            handler.setHandshakeTimeoutMillis(0);
+                            ch.pipeline().addLast(handler);
                             ch.pipeline().addLast(new ChannelHandler() {
                                 @Override
                                 public void userEventTriggered(
-                                        ChannelHandlerContext ctx, Object evt) throws Exception {
+                                        ChannelHandlerContext ctx, Object evt) {
                                     if (evt instanceof SslHandshakeCompletionEvent) {
                                         SslHandshakeCompletionEvent event = (SslHandshakeCompletionEvent) evt;
                                         if (!event.isSuccess()) {
@@ -117,7 +131,7 @@ public abstract class RenegotiateTest {
                         }
                     });
 
-            Channel clientChannel = bootstrap.connect(channel.localAddress()).syncUninterruptibly().channel();
+            Channel clientChannel = bootstrap.connect(channel.localAddress()).get();
             latch.await();
             clientChannel.close().syncUninterruptibly();
             channel.close().syncUninterruptibly();

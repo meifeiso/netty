@@ -3,7 +3,7 @@
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -30,9 +30,11 @@ import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -42,7 +44,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TrafficShapingHandlerTest extends AbstractSocketTest {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(TrafficShapingHandlerTest.class);
@@ -70,7 +72,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         random.nextBytes(data);
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void createGroup() {
         logger.info("Bandwidth: " + minfactor + " <= " + bandwidthFactor + " <= " + maxfactor +
                     " StepMs: " + stepms + " MinMs: " + minimalms + " CheckMs: " + check);
@@ -78,7 +80,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         groupForGlobal = new DefaultEventExecutorGroup(8);
     }
 
-    @AfterClass
+    @AfterAll
     public static void destroyGroup() throws Exception {
         group.shutdownGracefully().sync();
         groupForGlobal.shutdownGracefully().sync();
@@ -127,11 +129,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         return minimalWaitBetween;
     }
 
-    @Test(timeout = 10000)
-    public void testNoTrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testNoTrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST NO TRAFFIC";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testNoTrafficShapping);
     }
 
     public void testNoTrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -141,11 +144,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         testTrafficShapping0(sb, cb, false, false, false, false, autoRead, minimalWaitBetween, multipleMessage);
     }
 
-    @Test(timeout = 10000)
-    public void testWriteTrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testWriteTrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST WRITE";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testWriteTrafficShapping);
     }
 
     public void testWriteTrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -155,11 +159,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         testTrafficShapping0(sb, cb, false, false, true, false, autoRead, minimalWaitBetween, multipleMessage);
     }
 
-    @Test(timeout = 10000)
-    public void testReadTrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testReadTrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST READ";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testReadTrafficShapping);
     }
 
     public void testReadTrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -169,11 +174,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         testTrafficShapping0(sb, cb, false, true, false, false, autoRead, minimalWaitBetween, multipleMessage);
     }
 
-    @Test(timeout = 10000)
-    public void testWrite1TrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testWrite1TrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST WRITE";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testWrite1TrafficShapping);
     }
 
     public void testWrite1TrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -183,11 +189,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         testTrafficShapping0(sb, cb, false, false, true, false, autoRead, minimalWaitBetween, multipleMessage);
     }
 
-    @Test(timeout = 10000)
-    public void testRead1TrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testRead1TrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST READ";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testRead1TrafficShapping);
     }
 
     public void testRead1TrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -197,11 +204,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         testTrafficShapping0(sb, cb, false, true, false, false, autoRead, minimalWaitBetween, multipleMessage);
     }
 
-    @Test(timeout = 10000)
-    public void testWriteGlobalTrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testWriteGlobalTrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST GLOBAL WRITE";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testWriteGlobalTrafficShapping);
     }
 
     public void testWriteGlobalTrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -211,11 +219,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         testTrafficShapping0(sb, cb, false, false, true, true, autoRead, minimalWaitBetween, multipleMessage);
     }
 
-    @Test(timeout = 10000)
-    public void testReadGlobalTrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testReadGlobalTrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST GLOBAL READ";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testReadGlobalTrafficShapping);
     }
 
     public void testReadGlobalTrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -225,11 +234,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         testTrafficShapping0(sb, cb, false, true, false, true, autoRead, minimalWaitBetween, multipleMessage);
     }
 
-    @Test(timeout = 10000)
-    public void testAutoReadTrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testAutoReadTrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST AUTO READ";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testAutoReadTrafficShapping);
     }
 
     public void testAutoReadTrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -240,11 +250,12 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         testTrafficShapping0(sb, cb, false, true, false, false, autoRead, minimalWaitBetween, multipleMessage);
     }
 
-    @Test(timeout = 10000)
-    public void testAutoReadGlobalTrafficShapping() throws Throwable {
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
+    public void testAutoReadGlobalTrafficShapping(TestInfo testInfo) throws Throwable {
         currentTestName = "TEST AUTO READ GLOBAL";
         currentTestRun = 0;
-        run();
+        run(testInfo, this::testAutoReadGlobalTrafficShapping);
     }
 
     public void testAutoReadGlobalTrafficShapping(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -271,7 +282,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
      * @param multipleMessage
      *            how many message to send at each step (for READ: the first should be 1, as the two last steps to
      *            ensure correct testing)
-     * @throws Throwable
+     * @throws Throwable if something goes wrong, and the test fails.
      */
     private static void testTrafficShapping0(
             ServerBootstrap sb, Bootstrap cb, final boolean additionalExecutor,
@@ -323,8 +334,8 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
             }
         });
 
-        Channel sc = sb.bind().sync().channel();
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
+        Channel sc = sb.bind().get();
+        Channel cc = cb.connect(sc.localAddress()).get();
 
         int totalNb = 0;
         for (int i = 1; i < multipleMessage.length; i++) {
@@ -339,7 +350,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
 
         promise.await();
         Long stop = TrafficCounter.milliSecondFromNano();
-        assertTrue("Error during execution of TrafficShapping: " + promise.cause(), promise.isSuccess());
+        assertTrue(promise.isSuccess(), "Error during execution of TrafficShapping: " + promise.cause());
 
         float average = (totalNb * messageSize) / (float) (stop - start);
         logger.info("TEST: " + currentTestName + " RUN: " + currentTestRun +
@@ -353,14 +364,14 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         }
 
         if (autoRead == null && minimalWaitBetween != null) {
-            assertTrue("Overall Traffic not ok since > " + maxfactor + ": " + average,
-                       average <= maxfactor);
+            assertTrue(average <= maxfactor,
+                "Overall Traffic not ok since > " + maxfactor + ": " + average);
             if (additionalExecutor) {
                 // Oio is not as good when using additionalExecutor
-                assertTrue("Overall Traffic not ok since < 0.25: " + average, average >= 0.25);
+                assertTrue(average >= 0.25, "Overall Traffic not ok since < 0.25: " + average);
             } else {
-                assertTrue("Overall Traffic not ok since < " + minfactor + ": " + average,
-                           average >= minfactor);
+                assertTrue(average >= minfactor,
+                    "Overall Traffic not ok since < " + minfactor + ": " + average);
             }
         }
         if (handler != null && globalLimit) {
@@ -406,7 +417,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         }
 
         @Override
-        public void channelRead0(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        public void messageReceived(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
             long lastTimestamp = 0;
             loggerClient.debug("Step: " + step + " Read: " + in.readableBytes() / 8 + " blocks");
             while (in.isReadable()) {
@@ -426,8 +437,8 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
             }
             loggerClient.info("Step: " + step + " Interval: " + (lastTimestamp - currentLastTime) + " compareTo "
                               + minimalWait + " (" + ar + ')');
-            assertTrue("The interval of time is incorrect:" + (lastTimestamp - currentLastTime) + " not> "
-                       + minimalWait, lastTimestamp - currentLastTime >= minimalWait);
+            assertTrue(lastTimestamp - currentLastTime >= minimalWait,
+                    "The interval of time is incorrect:" + (lastTimestamp - currentLastTime) + " not> " + minimalWait);
             currentLastTime = lastTimestamp;
             step++;
             if (multipleMessage.length > step) {
@@ -469,7 +480,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         }
 
         @Override
-        public void channelRead0(final ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        public void messageReceived(final ChannelHandlerContext ctx, ByteBuf in) throws Exception {
             byte[] actual = new byte[in.readableBytes()];
             int nb = actual.length / messageSize;
             loggerServer.info("Step: " + step + " Read: " + nb + " blocks");

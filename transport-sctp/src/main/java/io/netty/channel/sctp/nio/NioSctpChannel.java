@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,10 +23,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelMetadata;
 import io.netty.channel.ChannelOutboundBuffer;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.nio.AbstractNioMessageChannel;
@@ -35,7 +33,8 @@ import io.netty.channel.sctp.SctpChannelConfig;
 import io.netty.channel.sctp.SctpMessage;
 import io.netty.channel.sctp.SctpNotificationHandler;
 import io.netty.channel.sctp.SctpServerChannel;
-import io.netty.util.internal.PlatformDependent;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -281,10 +280,7 @@ public class NioSctpChannel extends AbstractNioMessageChannel implements io.nett
                     buffer.writerIndex(buffer.writerIndex() + allocHandle.lastBytesRead())));
             free = false;
             return 1;
-        } catch (Throwable cause) {
-            PlatformDependent.throwException(cause);
-            return -1;
-        }  finally {
+        } finally {
             if (free) {
                 buffer.release();
             }
@@ -340,41 +336,41 @@ public class NioSctpChannel extends AbstractNioMessageChannel implements io.nett
     }
 
     @Override
-    public ChannelFuture bindAddress(InetAddress localAddress) {
+    public Future<Void> bindAddress(InetAddress localAddress) {
         return bindAddress(localAddress, newPromise());
     }
 
     @Override
-    public ChannelFuture bindAddress(final InetAddress localAddress, final ChannelPromise promise) {
-        if (eventLoop().inEventLoop()) {
+    public Future<Void> bindAddress(final InetAddress localAddress, final Promise<Void> promise) {
+        if (executor().inEventLoop()) {
             try {
                 javaChannel().bindAddress(localAddress);
-                promise.setSuccess();
+                promise.setSuccess(null);
             } catch (Throwable t) {
                 promise.setFailure(t);
             }
         } else {
-            eventLoop().execute(() -> bindAddress(localAddress, promise));
+            executor().execute(() -> bindAddress(localAddress, promise));
         }
         return promise;
     }
 
     @Override
-    public ChannelFuture unbindAddress(InetAddress localAddress) {
+    public Future<Void> unbindAddress(InetAddress localAddress) {
         return unbindAddress(localAddress, newPromise());
     }
 
     @Override
-    public ChannelFuture unbindAddress(final InetAddress localAddress, final ChannelPromise promise) {
-        if (eventLoop().inEventLoop()) {
+    public Future<Void> unbindAddress(final InetAddress localAddress, final Promise<Void> promise) {
+        if (executor().inEventLoop()) {
             try {
                 javaChannel().unbindAddress(localAddress);
-                promise.setSuccess();
+                promise.setSuccess(null);
             } catch (Throwable t) {
                 promise.setFailure(t);
             }
         } else {
-            eventLoop().execute(() -> unbindAddress(localAddress, promise));
+            executor().execute(() -> unbindAddress(localAddress, promise));
         }
         return promise;
     }

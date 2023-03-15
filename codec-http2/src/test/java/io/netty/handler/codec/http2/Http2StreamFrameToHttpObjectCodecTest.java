@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,7 +21,6 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.EncoderException;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
@@ -39,26 +38,29 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpScheme;
-import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.CharsetUtil;
-
-import org.junit.Test;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertFalse;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class Http2StreamFrameToHttpObjectCodecTest {
 
@@ -89,15 +91,17 @@ public class Http2StreamFrameToHttpObjectCodecTest {
         assertFalse(ch.finish());
     }
 
-    @Test (expected = EncoderException.class)
+    @Test
     public void encodeNonFullHttpResponse100ContinueIsRejected() throws Exception {
-        EmbeddedChannel ch = new EmbeddedChannel(new Http2StreamFrameToHttpObjectCodec(true));
-        try {
-            ch.writeOutbound(new DefaultHttpResponse(
-                    HttpVersion.HTTP_1_1, HttpResponseStatus.CONTINUE));
-        } finally {
-            ch.finishAndReleaseAll();
-        }
+        final EmbeddedChannel ch = new EmbeddedChannel(new Http2StreamFrameToHttpObjectCodec(true));
+        assertThrows(EncoderException.class, new Executable() {
+            @Override
+            public void execute() {
+                ch.writeOutbound(new DefaultHttpResponse(
+                        HttpVersion.HTTP_1_1, HttpResponseStatus.CONTINUE));
+            }
+        });
+        ch.finishAndReleaseAll();
     }
 
     @Test
@@ -451,13 +455,12 @@ public class Http2StreamFrameToHttpObjectCodecTest {
         EmbeddedChannel ch = new EmbeddedChannel(ctx.newHandler(ByteBufAllocator.DEFAULT),
                 new ChannelHandler() {
                     @Override
-                    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+                    public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
                         if (msg instanceof Http2StreamFrame) {
                             frames.add((Http2StreamFrame) msg);
-                            ctx.write(Unpooled.EMPTY_BUFFER, promise);
-                        } else {
-                            ctx.write(msg, promise);
+                            return ctx.write(Unpooled.EMPTY_BUFFER);
                         }
+                        return ctx.write(msg);
                     }
                 }, new Http2StreamFrameToHttpObjectCodec(false));
 
@@ -881,26 +884,24 @@ public class Http2StreamFrameToHttpObjectCodecTest {
         EmbeddedChannel tlsCh = new EmbeddedChannel(ctx.newHandler(ByteBufAllocator.DEFAULT),
             new ChannelHandler() {
                 @Override
-                public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+                public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
                     if (msg instanceof Http2StreamFrame) {
                         frames.add((Http2StreamFrame) msg);
-                        promise.setSuccess();
-                    } else {
-                        ctx.write(msg, promise);
+                        return ctx.newSucceededFuture();
                     }
+                    return ctx.write(msg);
                 }
             }, sharedHandler);
 
         EmbeddedChannel plaintextCh = new EmbeddedChannel(
             new ChannelHandler() {
                 @Override
-                public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+                public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
                     if (msg instanceof Http2StreamFrame) {
                         frames.add((Http2StreamFrame) msg);
-                        promise.setSuccess();
-                    } else {
-                        ctx.write(msg, promise);
+                        return ctx.newSucceededFuture();
                     }
+                    return ctx.write(msg);
                 }
             }, sharedHandler);
 

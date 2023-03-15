@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -45,6 +45,11 @@ final class RunnableFutureAdapter<V> implements RunnableFuture<V> {
     }
 
     @Override
+    public boolean isFailed() {
+        return promise.isFailed();
+    }
+
+    @Override
     public boolean isCancellable() {
         return promise.isCancellable();
     }
@@ -55,26 +60,14 @@ final class RunnableFutureAdapter<V> implements RunnableFuture<V> {
     }
 
     @Override
-    public RunnableFuture<V> addListener(GenericFutureListener<? extends Future<? super V>> listener) {
+    public RunnableFuture<V> addListener(FutureListener<? super V> listener) {
         promise.addListener(listener);
         return this;
     }
 
     @Override
-    public RunnableFuture<V> addListeners(GenericFutureListener<? extends Future<? super V>>... listeners) {
-        promise.addListeners(listeners);
-        return this;
-    }
-
-    @Override
-    public RunnableFuture<V> removeListener(GenericFutureListener<? extends Future<? super V>> listener) {
-        promise.removeListener(listener);
-        return this;
-    }
-
-    @Override
-    public RunnableFuture<V> removeListeners(GenericFutureListener<? extends Future<? super V>>... listeners) {
-        promise.removeListeners(listeners);
+    public <C> RunnableFuture<V> addListener(C context, FutureContextListener<? super C, ? super V> listener) {
+        promise.addListener(context, listener);
         return this;
     }
 

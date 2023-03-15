@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,20 +15,22 @@
  */
 package io.netty.handler.codec.http.websocketx.extensions;
 
-import static java.util.Objects.requireNonNull;
-
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+
+import static io.netty.util.internal.ObjectUtil.checkNonEmpty;
 
 /**
  * This handler negotiates and initializes the WebSocket Extensions.
@@ -54,16 +56,11 @@ public class WebSocketServerExtensionHandler implements ChannelHandler {
      *      with fallback configuration.
      */
     public WebSocketServerExtensionHandler(WebSocketServerExtensionHandshaker... extensionHandshakers) {
-        requireNonNull(extensionHandshakers, "extensionHandshakers");
-        if (extensionHandshakers.length == 0) {
-            throw new IllegalArgumentException("extensionHandshakers must contains at least one handshaker");
-        }
-        this.extensionHandshakers = Arrays.asList(extensionHandshakers);
+        this.extensionHandshakers = Arrays.asList(checkNonEmpty(extensionHandshakers, "extensionHandshakers"));
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg)
-            throws Exception {
+    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (msg instanceof HttpRequest) {
             HttpRequest request = (HttpRequest) msg;
 
@@ -102,36 +99,56 @@ public class WebSocketServerExtensionHandler implements ChannelHandler {
     }
 
     @Override
-    public void write(final ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        if (msg instanceof HttpResponse &&
-                WebSocketExtensionUtil.isWebsocketUpgrade(((HttpResponse) msg).headers()) && validExtensions != null) {
-            HttpResponse response = (HttpResponse) msg;
-            String headerValue = response.headers().getAsString(HttpHeaderNames.SEC_WEBSOCKET_EXTENSIONS);
+    public Future<Void> write(final ChannelHandlerContext ctx, Object msg) {
+        if (msg instanceof HttpResponse) {
+            HttpResponse httpResponse = (HttpResponse) msg;
+            //checking the status is faster than looking at headers
+            //so we do this first
+            if (HttpResponseStatus.SWITCHING_PROTOCOLS.equals(httpResponse.status())) {
+                HttpHeaders headers = httpResponse.headers();
 
-            for (WebSocketServerExtension extension : validExtensions) {
-                WebSocketExtensionData extensionData = extension.newResponseData();
-                headerValue = WebSocketExtensionUtil.appendExtension(headerValue,
-                        extensionData.name(), extensionData.parameters());
-            }
+                FutureListener<Void> listener = null;
+                if (WebSocketExtensionUtil.isWebsocketUpgrade(headers)) {
+                    if (validExtensions != null) {
+                        String headerValue = headers.getAsString(HttpHeaderNames.SEC_WEBSOCKET_EXTENSIONS);
+                        List<WebSocketExtensionData> extraExtensions =
+                                new ArrayList<WebSocketExtensionData>(extensionHandshakers.size());
+                        for (WebSocketServerExtension extension : validExtensions) {
+                            extraExtensions.add(extension.newResponseData());
+                        }
+                        String newHeaderValue = WebSocketExtensionUtil
+                                .computeMergeExtensionsHeaderValue(headerValue, extraExtensions);
+                        listener = future -> {
+                            if (future.isSuccess()) {
+                                for (WebSocketServerExtension extension : validExtensions) {
+                                    WebSocketExtensionDecoder decoder = extension.newExtensionDecoder();
+                                    WebSocketExtensionEncoder encoder = extension.newExtensionEncoder();
+                                    String name = ctx.name();
+                                    ctx.pipeline()
 
-            promise.addListener((ChannelFutureListener) future -> {
-                if (future.isSuccess()) {
-                    for (WebSocketServerExtension extension : validExtensions) {
-                        WebSocketExtensionDecoder decoder = extension.newExtensionDecoder();
-                        WebSocketExtensionEncoder encoder = extension.newExtensionEncoder();
-                        ctx.pipeline().addAfter(ctx.name(), decoder.getClass().getName(), decoder);
-                        ctx.pipeline().addAfter(ctx.name(), encoder.getClass().getName(), encoder);
+                                            .addAfter(name, decoder.getClass().getName(), decoder)
+                                            .addAfter(name, encoder.getClass().getName(), encoder);
+                                }
+                            }
+                        };
+
+                        if (newHeaderValue != null) {
+                            headers.set(HttpHeaderNames.SEC_WEBSOCKET_EXTENSIONS, newHeaderValue);
+                        }
                     }
+                    Future<Void> f = ctx.write(httpResponse);
+                    if (listener != null) {
+                        f.addListener(listener);
+                    }
+                    f.addListener(future -> {
+                        if (future.isSuccess()) {
+                            ctx.pipeline().remove(this);
+                        }
+                    });
+                    return f;
                 }
-
-                ctx.pipeline().remove(ctx.name());
-            });
-
-            if (headerValue != null) {
-                response.headers().set(HttpHeaderNames.SEC_WEBSOCKET_EXTENSIONS, headerValue);
             }
         }
-
-        ctx.write(msg, promise);
+        return ctx.write(msg);
     }
 }

@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -15,9 +15,9 @@
 package io.netty.handler.codec.http2;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.UnstableApi;
 
 /**
@@ -37,9 +37,8 @@ public interface Http2DataWriter {
      *                A 256 byte padding is encoded as the pad length field with value 255 and 255 padding bytes
      *                appended to the end of the frame.
      * @param endStream indicates if this is the last frame to be sent for the stream.
-     * @param promise the promise for the write.
      * @return the future for the write.
      */
-    ChannelFuture writeData(ChannelHandlerContext ctx, int streamId,
-            ByteBuf data, int padding, boolean endStream, ChannelPromise promise);
+    Future<Void> writeData(ChannelHandlerContext ctx, int streamId,
+                     ByteBuf data, int padding, boolean endStream);
 }

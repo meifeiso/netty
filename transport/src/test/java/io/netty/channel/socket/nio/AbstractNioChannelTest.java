@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,7 +24,7 @@ import io.netty.channel.nio.NioHandler;
 import io.netty.util.concurrent.AbstractEventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.ScheduledFuture;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.SocketOption;
@@ -33,7 +33,11 @@ import java.nio.channels.NetworkChannel;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 public abstract class AbstractNioChannelTest<T extends AbstractNioChannel> {
 
@@ -186,7 +190,7 @@ public abstract class AbstractNioChannelTest<T extends AbstractNioChannel> {
         T channel = newNioChannel(wrapped);
         channel.register().syncUninterruptibly();
 
-        assertSame(wrapped, channel.eventLoop());
+        assertSame(wrapped, channel.executor());
         channel.close().syncUninterruptibly();
         eventLoopGroup.shutdownGracefully();
     }

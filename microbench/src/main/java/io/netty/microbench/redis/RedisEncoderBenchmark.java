@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,13 +20,13 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.redis.ArrayRedisMessage;
 import io.netty.handler.codec.redis.FullBulkStringRedisMessage;
 import io.netty.handler.codec.redis.RedisEncoder;
 import io.netty.handler.codec.redis.RedisMessage;
 import io.netty.microbench.channel.EmbeddedChannelWriteReleaseHandlerContext;
 import io.netty.microbench.util.AbstractMicrobenchmark;
+import io.netty.util.concurrent.Future;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Level;
@@ -55,9 +55,6 @@ public class RedisEncoderBenchmark extends AbstractMicrobenchmark {
 
     @Param({ "true", "false" })
     public boolean pooledAllocator;
-
-    @Param({ "true", "false" })
-    public boolean voidPromise;
 
     @Param({ "50", "200", "1000" })
     public int arraySize;
@@ -91,11 +88,7 @@ public class RedisEncoderBenchmark extends AbstractMicrobenchmark {
     }
 
     @Benchmark
-    public void writeArray() throws Exception {
-        encoder.write(context, redisArray.retain(), newPromise());
-    }
-
-    private ChannelPromise newPromise() {
-        return voidPromise ? context.voidPromise() : context.newPromise();
+    public Future<Void> writeArray() {
+        return encoder.write(context, redisArray.retain());
     }
 }

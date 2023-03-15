@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,13 +22,14 @@ import io.netty.handler.codec.EncoderException;
 import io.netty.handler.codec.memcache.DefaultLastMemcacheContent;
 import io.netty.handler.codec.memcache.DefaultMemcacheContent;
 import io.netty.util.CharsetUtil;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.CoreMatchers.*;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Verifies the correct functionality of the {@link AbstractBinaryMemcacheEncoder}.
@@ -39,12 +40,12 @@ public class BinaryMemcacheEncoderTest {
 
     private EmbeddedChannel channel;
 
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         channel = new EmbeddedChannel(new BinaryMemcacheRequestEncoder());
     }
 
-    @After
+    @AfterEach
     public void teardown() throws Exception {
         channel.finishAndReleaseAll();
     }
@@ -153,9 +154,9 @@ public class BinaryMemcacheEncoderTest {
         written.release();
     }
 
-    @Test(expected = EncoderException.class)
+    @Test
     public void shouldFailWithoutLastContent() {
         channel.writeOutbound(new DefaultMemcacheContent(Unpooled.EMPTY_BUFFER));
-        channel.writeOutbound(new DefaultBinaryMemcacheRequest());
+        assertThrows(EncoderException.class, () -> channel.writeOutbound(new DefaultBinaryMemcacheRequest()));
     }
 }

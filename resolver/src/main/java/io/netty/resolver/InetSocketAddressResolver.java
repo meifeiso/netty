@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,6 @@ import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
-import io.netty.util.internal.UnstableApi;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -29,7 +28,6 @@ import java.util.List;
 /**
  * A {@link AbstractAddressResolver} that resolves {@link InetSocketAddress}.
  */
-@UnstableApi
 public class InetSocketAddressResolver extends AbstractAddressResolver<InetSocketAddress> {
 
     final NameResolver<InetAddress> nameResolver;
@@ -55,7 +53,7 @@ public class InetSocketAddressResolver extends AbstractAddressResolver<InetSocke
         // Note that InetSocketAddress.getHostName() will never incur a reverse lookup here,
         // because an unresolved address always has a host name.
         nameResolver.resolve(unresolvedAddress.getHostName())
-                .addListener((FutureListener<InetAddress>) future -> {
+                .addListener(future -> {
                     if (future.isSuccess()) {
                         promise.setSuccess(new InetSocketAddress(future.getNow(), unresolvedAddress.getPort()));
                     } else {
@@ -70,7 +68,7 @@ public class InetSocketAddressResolver extends AbstractAddressResolver<InetSocke
         // Note that InetSocketAddress.getHostName() will never incur a reverse lookup here,
         // because an unresolved address always has a host name.
         nameResolver.resolveAll(unresolvedAddress.getHostName())
-                .addListener((FutureListener<List<InetAddress>>) future -> {
+                .addListener(future -> {
                     if (future.isSuccess()) {
                         List<InetAddress> inetAddresses = future.getNow();
                         List<InetSocketAddress> socketAddresses =

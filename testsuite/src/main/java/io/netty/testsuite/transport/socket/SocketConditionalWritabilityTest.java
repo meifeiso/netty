@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -25,14 +25,18 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.util.ReferenceCountUtil;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class SocketConditionalWritabilityTest extends AbstractSocketTest {
-    @Test(timeout = 30000)
-    public void testConditionalWritability() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testConditionalWritability(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testConditionalWritability);
     }
 
     public void testConditionalWritability(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -84,7 +88,7 @@ public class SocketConditionalWritabilityTest extends AbstractSocketTest {
                 }
             });
 
-            serverChannel = sb.bind().syncUninterruptibly().channel();
+            serverChannel = sb.bind().get();
 
             cb.handler(new ChannelInitializer<Channel>() {
                 @Override
@@ -109,7 +113,7 @@ public class SocketConditionalWritabilityTest extends AbstractSocketTest {
                     });
                 }
             });
-            clientChannel = cb.connect(serverChannel.localAddress()).syncUninterruptibly().channel();
+            clientChannel = cb.connect(serverChannel.localAddress()).get();
             latch.await();
         } finally {
             if (serverChannel != null) {

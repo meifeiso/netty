@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -15,13 +15,11 @@
 package io.netty.handler.codec.http;
 
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.util.AsciiString;
+import io.netty.util.concurrent.Future;
 
-import java.net.SocketAddress;
 import java.util.Collection;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.SWITCHING_PROTOCOLS;
@@ -122,73 +120,30 @@ public class HttpClientUpgradeHandler extends HttpObjectAggregator {
     }
 
     @Override
-    public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) throws Exception {
-        ctx.bind(localAddress, promise);
-    }
-
-    @Override
-    public void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress, SocketAddress localAddress,
-                        ChannelPromise promise) throws Exception {
-        ctx.connect(remoteAddress, localAddress, promise);
-    }
-
-    @Override
-    public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        ctx.disconnect(promise);
-    }
-
-    @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        ctx.close(promise);
-    }
-
-    @Override
-    public void register(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        ctx.register(promise);
-    }
-
-    @Override
-    public void deregister(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        ctx.deregister(promise);
-    }
-
-    @Override
-    public void read(ChannelHandlerContext ctx) throws Exception {
-        ctx.read();
-    }
-
-    @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-            throws Exception {
+    public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
         if (!(msg instanceof HttpRequest)) {
-            ctx.write(msg, promise);
-            return;
+            return ctx.write(msg);
         }
 
         if (upgradeRequested) {
-            promise.setFailure(new IllegalStateException(
+            return ctx.newFailedFuture(new IllegalStateException(
                     "Attempting to write HTTP request with upgrade in progress"));
-            return;
         }
 
         upgradeRequested = true;
         setUpgradeRequestHeaders(ctx, (HttpRequest) msg);
 
         // Continue writing the request.
-        ctx.write(msg, promise);
+        Future<Void> f = ctx.write(msg);
 
         // Notify that the upgrade request was issued.
         ctx.fireUserEventTriggered(UpgradeEvent.UPGRADE_ISSUED);
         // Now we wait for the next HTTP response to see if we switch protocols.
+        return f;
     }
 
     @Override
-    public void flush(ChannelHandlerContext ctx) throws Exception {
-        ctx.flush();
-    }
-
-    @Override
-    protected void decode(ChannelHandlerContext ctx, HttpObject msg, List<Object> out)
+    protected void decode(final ChannelHandlerContext ctx, HttpObject msg)
             throws Exception {
         FullHttpResponse response = null;
         try {
@@ -204,29 +159,38 @@ public class HttpClientUpgradeHandler extends HttpObjectAggregator {
                     // NOTE: not releasing the response since we're letting it propagate to the
                     // next handler.
                     ctx.fireUserEventTriggered(UpgradeEvent.UPGRADE_REJECTED);
-                    removeThisHandler(ctx);
                     ctx.fireChannelRead(msg);
+                    removeThisHandler(ctx);
                     return;
                 }
             }
 
             if (msg instanceof FullHttpResponse) {
                 response = (FullHttpResponse) msg;
+
                 // Need to retain since the base class will release after returning from this method.
-                response.retain();
-                out.add(response);
+                tryUpgrade(ctx, response.retain());
             } else {
                 // Call the base class to handle the aggregation of the full request.
-                super.decode(ctx, msg, out);
-                if (out.isEmpty()) {
-                    // The full request hasn't been created yet, still awaiting more data.
-                    return;
-                }
-
-                assert out.size() == 1;
-                response = (FullHttpResponse) out.get(0);
+                super.decode(new DelegatingChannelHandlerContext(ctx) {
+                    @Override
+                    public ChannelHandlerContext fireChannelRead(Object msg) {
+                        FullHttpResponse response = (FullHttpResponse) msg;
+                        tryUpgrade(ctx, response);
+                        return this;
+                    }
+                }, msg);
             }
 
+        } catch (Throwable t) {
+            release(response);
+            ctx.fireExceptionCaught(t);
+            removeThisHandler(ctx);
+        }
+    }
+
+    private void tryUpgrade(ChannelHandlerContext ctx, FullHttpResponse response) {
+        try {
             CharSequence upgradeHeader = response.headers().get(HttpHeaderNames.UPGRADE);
             if (upgradeHeader != null && !AsciiString.contentEqualsIgnoreCase(upgradeCodec.protocol(), upgradeHeader)) {
                 throw new IllegalStateException(
@@ -247,7 +211,6 @@ public class HttpClientUpgradeHandler extends HttpObjectAggregator {
             // We switched protocols, so we're done with the upgrade response.
             // Release it and clear it from the output.
             response.release();
-            out.clear();
             removeThisHandler(ctx);
         } catch (Throwable t) {
             release(response);

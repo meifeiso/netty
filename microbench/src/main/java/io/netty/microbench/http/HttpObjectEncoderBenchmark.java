@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,6 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpRequest;
@@ -66,9 +65,6 @@ public class HttpObjectEncoderBenchmark extends AbstractMicrobenchmark {
     @Param({ "true", "false" })
     public boolean pooledAllocator;
 
-    @Param({ "true", "false" })
-    public boolean voidPromise;
-
     @Setup(Level.Trial)
     public void setup() {
         byte[] bytes = new byte[256];
@@ -105,22 +101,18 @@ public class HttpObjectEncoderBenchmark extends AbstractMicrobenchmark {
 
     @Benchmark
     public void fullMessage() throws Exception {
-        encoder.write(context, fullRequest, newPromise());
+        encoder.write(context, fullRequest);
     }
 
     @Benchmark
     public void contentLength() throws Exception {
-        encoder.write(context, contentLengthRequest, newPromise());
-        encoder.write(context, lastContent, newPromise());
+        encoder.write(context, contentLengthRequest);
+        encoder.write(context, lastContent);
     }
 
     @Benchmark
     public void chunked() throws Exception {
-        encoder.write(context, chunkedRequest, newPromise());
-        encoder.write(context, lastContent, newPromise());
-    }
-
-    private ChannelPromise newPromise() {
-        return voidPromise ? context.voidPromise() : context.newPromise();
+        encoder.write(context, chunkedRequest);
+        encoder.write(context, lastContent);
     }
 }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,15 +21,17 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.socket.ChannelInputShutdownEvent;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ReplayingDecoderTest {
 
@@ -67,10 +69,10 @@ public class ReplayingDecoderTest {
         }
 
         @Override
-        protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+        protected void decode(ChannelHandlerContext ctx, ByteBuf in) {
             ByteBuf msg = in.readBytes(in.bytesBefore((byte) '\n'));
-            out.add(msg);
             in.skipBytes(1);
+            ctx.fireChannelRead(msg);
         }
     }
 
@@ -120,7 +122,7 @@ public class ReplayingDecoderTest {
         buf.release();
         buf2.release();
 
-        assertNull("Must be null as it must only decode one frame", ch.readInbound());
+        assertNull(ch.readInbound(), "Must be null as it must only decode one frame");
 
         ch.read();
         ch.finish();
@@ -141,7 +143,7 @@ public class ReplayingDecoderTest {
             private boolean removed;
 
             @Override
-            protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+            protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
                 assertFalse(removed);
                 in.readByte();
                 ctx.pipeline().remove(this);
@@ -163,7 +165,7 @@ public class ReplayingDecoderTest {
             private boolean removed;
 
             @Override
-            protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+            protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
                 assertFalse(removed);
                 ctx.pipeline().remove(this);
 
@@ -177,7 +179,7 @@ public class ReplayingDecoderTest {
         channel.writeInbound(buf.copy());
         ByteBuf b = channel.readInbound();
 
-        assertEquals("Expect to have still all bytes in the buffer", b, buf);
+        assertEquals(b, buf, "Expect to have still all bytes in the buffer");
         b.release();
         buf.release();
     }
@@ -189,7 +191,7 @@ public class ReplayingDecoderTest {
             private boolean removed;
 
             @Override
-            protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+            protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
                 assertFalse(removed);
                 in.readByte();
                 ctx.pipeline().remove(this);
@@ -214,17 +216,17 @@ public class ReplayingDecoderTest {
         EmbeddedChannel channel = new EmbeddedChannel(new ReplayingDecoder<Integer>() {
 
             @Override
-            protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+            protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
                 int readable = in.readableBytes();
                 assertTrue(readable > 0);
                 in.skipBytes(readable);
-                out.add("data");
+                ctx.fireChannelRead("data");
             }
 
             @Override
-            protected void decodeLast(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+            protected void decodeLast(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
                 assertFalse(in.isReadable());
-                out.add("data");
+                ctx.fireChannelRead("data");
             }
         }, new ChannelHandler() {
             @Override
@@ -261,7 +263,7 @@ public class ReplayingDecoderTest {
             private boolean decoded;
 
             @Override
-            protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+            protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
                 if (!(in instanceof ReplayingDecoderByteBuf)) {
                     error.set(new AssertionError("in must be of type " + ReplayingDecoderByteBuf.class
                             + " but was " + in.getClass()));
@@ -292,7 +294,7 @@ public class ReplayingDecoderTest {
     public void handlerRemovedWillNotReleaseBufferIfDecodeInProgress() {
         EmbeddedChannel channel = new EmbeddedChannel(new ReplayingDecoder<Integer>() {
             @Override
-            protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+            protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
                 ctx.pipeline().remove(this);
                 assertTrue(in.refCnt() != 0);
             }
@@ -310,7 +312,7 @@ public class ReplayingDecoderTest {
     }
 
     private static void assertCumulationReleased(ByteBuf byteBuf) {
-        assertTrue("unexpected value: " + byteBuf,
-                byteBuf == null || byteBuf == Unpooled.EMPTY_BUFFER || byteBuf.refCnt() == 0);
+        assertTrue(byteBuf == null || byteBuf == Unpooled.EMPTY_BUFFER || byteBuf.refCnt() == 0,
+                "unexpected value: " + byteBuf);
     }
 }

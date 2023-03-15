@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,15 +18,13 @@ package io.netty.handler.codec.compression;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
-import io.netty.channel.ChannelPromiseNotifier;
 import io.netty.handler.codec.EncoderException;
 import io.netty.handler.codec.MessageToByteEncoder;
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.ObjectUtil;
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Exception;
@@ -49,14 +47,13 @@ import static io.netty.handler.codec.compression.Lz4Constants.MAGIC_NUMBER;
 import static io.netty.handler.codec.compression.Lz4Constants.MAX_BLOCK_SIZE;
 import static io.netty.handler.codec.compression.Lz4Constants.MIN_BLOCK_SIZE;
 import static io.netty.handler.codec.compression.Lz4Constants.TOKEN_OFFSET;
-
 import static java.util.Objects.requireNonNull;
 
 /**
  * Compresses a {@link ByteBuf} using the LZ4 format.
  *
  * See original <a href="https://github.com/Cyan4973/lz4">LZ4 Github project</a>
- * and <a href="http://fastcompression.blogspot.ru/2011/05/lz4-explained.html">LZ4 block format</a>
+ * and <a href="https://fastcompression.blogspot.ru/2011/05/lz4-explained.html">LZ4 block format</a>
  * for full description.
  *
  * Since the original LZ4 block format does not contains size of compressed block and size of original data
@@ -297,7 +294,7 @@ public class Lz4FrameEncoder extends MessageToByteEncoder<ByteBuf> {
     }
 
     @Override
-    public void flush(final ChannelHandlerContext ctx) throws Exception {
+    public void flush(final ChannelHandlerContext ctx) {
         if (buffer != null && buffer.isReadable()) {
             final ByteBuf buf = allocateBuffer(ctx, Unpooled.EMPTY_BUFFER, isPreferDirect(), false);
             flushBufferedData(buf);
@@ -306,10 +303,9 @@ public class Lz4FrameEncoder extends MessageToByteEncoder<ByteBuf> {
         ctx.flush();
     }
 
-    private ChannelFuture finishEncode(final ChannelHandlerContext ctx, ChannelPromise promise) {
+    private Future<Void> finishEncode(final ChannelHandlerContext ctx) {
         if (finished) {
-            promise.setSuccess();
-            return promise;
+            return ctx.newSucceededFuture();
         }
         finished = true;
 
@@ -317,6 +313,7 @@ public class Lz4FrameEncoder extends MessageToByteEncoder<ByteBuf> {
                 compressor.maxCompressedLength(buffer.readableBytes()) + HEADER_LENGTH);
         flushBufferedData(footer);
 
+        footer.ensureWritable(HEADER_LENGTH);
         final int idx = footer.writerIndex();
         footer.setLong(idx, MAGIC_NUMBER);
         footer.setByte(idx + TOKEN_OFFSET, (byte) (BLOCK_TYPE_NON_COMPRESSED | compressionLevel));
@@ -326,7 +323,7 @@ public class Lz4FrameEncoder extends MessageToByteEncoder<ByteBuf> {
 
         footer.writerIndex(idx + HEADER_LENGTH);
 
-        return ctx.writeAndFlush(footer, promise);
+        return ctx.writeAndFlush(footer);
     }
 
     /**
@@ -339,42 +336,35 @@ public class Lz4FrameEncoder extends MessageToByteEncoder<ByteBuf> {
     /**
      * Close this {@link Lz4FrameEncoder} and so finish the encoding.
      *
-     * The returned {@link ChannelFuture} will be notified once the operation completes.
+     * The returned {@link java.util.concurrent.Future} will be notified once the operation completes.
      */
-    public ChannelFuture close() {
-        return close(ctx().newPromise());
-    }
-
-    /**
-     * Close this {@link Lz4FrameEncoder} and so finish the encoding.
-     * The given {@link ChannelFuture} will be notified once the operation
-     * completes and will also be returned.
-     */
-    public ChannelFuture close(final ChannelPromise promise) {
+    public Future<Void> close() {
         ChannelHandlerContext ctx = ctx();
         EventExecutor executor = ctx.executor();
         if (executor.inEventLoop()) {
-            return finishEncode(ctx, promise);
+            return finishEncode(ctx);
         } else {
+            Promise<Void> promise = ctx.newPromise();
             executor.execute(() -> {
-                ChannelFuture f = finishEncode(ctx(), promise);
-                f.addListener(new ChannelPromiseNotifier(promise));
+                Future<Void> f = finishEncode(ctx());
+                f.cascadeTo(promise);
             });
             return promise;
         }
     }
 
     @Override
-    public void close(final ChannelHandlerContext ctx, final ChannelPromise promise) throws Exception {
-        ChannelFuture f = finishEncode(ctx, ctx.newPromise());
-        f.addListener((ChannelFutureListener) f1 -> ctx.close(promise));
-
-        if (!f.isDone()) {
-            // Ensure the channel is closed even if the write operation completes in time.
-            ctx.executor().schedule(() -> {
-                ctx.close(promise);
-            }, 10, TimeUnit.SECONDS); // FIXME: Magic number
+    public Future<Void> close(final ChannelHandlerContext ctx) {
+        Future<Void> f = finishEncode(ctx);
+        if (f.isDone()) {
+            return ctx.close();
         }
+        Promise<Void> promise = ctx.newPromise();
+        f.addListener(f1 -> ctx.close().cascadeTo(promise));
+        // Ensure the channel is closed even if the write operation completes in time.
+        ctx.executor().schedule(() -> ctx.close().cascadeTo(promise),
+                10, TimeUnit.SECONDS); // FIXME: Magic number
+        return promise;
     }
 
     private ChannelHandlerContext ctx() {

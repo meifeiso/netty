@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,15 +18,12 @@ package io.netty.resolver.dns;
 import static java.util.Objects.requireNonNull;
 
 import io.netty.handler.codec.dns.DnsQuestion;
-import io.netty.util.internal.EmptyArrays;
-import io.netty.util.internal.UnstableApi;
 
 import java.net.InetSocketAddress;
 
 /**
  * A {@link RuntimeException} raised when {@link DnsNameResolver} failed to perform a successful query.
  */
-@UnstableApi
 public class DnsNameResolverException extends RuntimeException {
 
     private static final long serialVersionUID = -8826717909627131850L;
@@ -35,14 +32,14 @@ public class DnsNameResolverException extends RuntimeException {
     private final DnsQuestion question;
 
     public DnsNameResolverException(InetSocketAddress remoteAddress, DnsQuestion question, String message) {
-        super(message);
+        super(message, null, true, false);
         this.remoteAddress = validateRemoteAddress(remoteAddress);
         this.question = validateQuestion(question);
     }
 
     public DnsNameResolverException(
             InetSocketAddress remoteAddress, DnsQuestion question, String message, Throwable cause) {
-        super(message, cause);
+        super(message, cause, true, false);
         this.remoteAddress = validateRemoteAddress(remoteAddress);
         this.question = validateQuestion(question);
     }
@@ -67,11 +64,5 @@ public class DnsNameResolverException extends RuntimeException {
      */
     public DnsQuestion question() {
         return question;
-    }
-
-    @Override
-    public Throwable fillInStackTrace() {
-        setStackTrace(EmptyArrays.EMPTY_STACK_TRACE);
-        return this;
     }
 }

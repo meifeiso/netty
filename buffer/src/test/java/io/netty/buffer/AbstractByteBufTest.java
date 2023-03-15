@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,9 +18,11 @@ package io.netty.buffer;
 import io.netty.util.ByteProcessor;
 import io.netty.util.CharsetUtil;
 import io.netty.util.IllegalReferenceCountException;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import io.netty.util.internal.PlatformDependent;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -58,16 +60,17 @@ import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.buffer.Unpooled.wrappedBuffer;
 import static io.netty.util.internal.EmptyArrays.EMPTY_BYTES;
 import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.junit.Assume.assumeFalse;
-import static org.junit.Assume.assumeTrue;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * An abstract test class for channel buffers
@@ -92,14 +95,14 @@ public abstract class AbstractByteBufTest {
         return true;
     }
 
-    @Before
+    @BeforeEach
     public void init() {
         buffer = newBuffer(CAPACITY);
         seed = System.currentTimeMillis();
         random = new Random(seed);
     }
 
-    @After
+    @AfterEach
     public void dispose() {
         if (buffer != null) {
             assertThat(buffer.release(), is(true));
@@ -138,34 +141,34 @@ public abstract class AbstractByteBufTest {
         assertEquals(0, buffer.readerIndex());
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void readerIndexBoundaryCheck1() {
         try {
             buffer.writerIndex(0);
         } catch (IndexOutOfBoundsException e) {
             fail();
         }
-        buffer.readerIndex(-1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.readerIndex(-1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void readerIndexBoundaryCheck2() {
         try {
             buffer.writerIndex(buffer.capacity());
         } catch (IndexOutOfBoundsException e) {
             fail();
         }
-        buffer.readerIndex(buffer.capacity() + 1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.readerIndex(buffer.capacity() + 1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void readerIndexBoundaryCheck3() {
         try {
             buffer.writerIndex(CAPACITY / 2);
         } catch (IndexOutOfBoundsException e) {
             fail();
         }
-        buffer.readerIndex(CAPACITY * 3 / 2);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.readerIndex(CAPACITY * 3 / 2));
     }
 
     @Test
@@ -176,12 +179,12 @@ public abstract class AbstractByteBufTest {
         buffer.readerIndex(buffer.capacity());
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void writerIndexBoundaryCheck1() {
-        buffer.writerIndex(-1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.writerIndex(-1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void writerIndexBoundaryCheck2() {
         try {
             buffer.writerIndex(CAPACITY);
@@ -189,10 +192,10 @@ public abstract class AbstractByteBufTest {
         } catch (IndexOutOfBoundsException e) {
             fail();
         }
-        buffer.writerIndex(buffer.capacity() + 1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.writerIndex(buffer.capacity() + 1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void writerIndexBoundaryCheck3() {
         try {
             buffer.writerIndex(CAPACITY);
@@ -200,7 +203,7 @@ public abstract class AbstractByteBufTest {
         } catch (IndexOutOfBoundsException e) {
             fail();
         }
-        buffer.writerIndex(CAPACITY / 4);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.writerIndex(CAPACITY / 4));
     }
 
     @Test
@@ -212,74 +215,74 @@ public abstract class AbstractByteBufTest {
         buffer.writeBytes(ByteBuffer.wrap(EMPTY_BYTES));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getBooleanBoundaryCheck1() {
-        buffer.getBoolean(-1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBoolean(-1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getBooleanBoundaryCheck2() {
-        buffer.getBoolean(buffer.capacity());
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBoolean(buffer.capacity()));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getByteBoundaryCheck1() {
-        buffer.getByte(-1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getByte(-1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getByteBoundaryCheck2() {
-        buffer.getByte(buffer.capacity());
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getByte(buffer.capacity()));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getShortBoundaryCheck1() {
-        buffer.getShort(-1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getShort(-1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getShortBoundaryCheck2() {
-        buffer.getShort(buffer.capacity() - 1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getShort(buffer.capacity() - 1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getMediumBoundaryCheck1() {
-        buffer.getMedium(-1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getMedium(-1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getMediumBoundaryCheck2() {
-        buffer.getMedium(buffer.capacity() - 2);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getMedium(buffer.capacity() - 2));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getIntBoundaryCheck1() {
-        buffer.getInt(-1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getInt(-1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getIntBoundaryCheck2() {
-        buffer.getInt(buffer.capacity() - 3);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getInt(buffer.capacity() - 3));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getLongBoundaryCheck1() {
-        buffer.getLong(-1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getLong(-1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getLongBoundaryCheck2() {
-        buffer.getLong(buffer.capacity() - 7);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getLong(buffer.capacity() - 7));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getByteArrayBoundaryCheck1() {
-        buffer.getBytes(-1, EMPTY_BYTES);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(-1, EMPTY_BYTES));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getByteArrayBoundaryCheck2() {
-        buffer.getBytes(-1, EMPTY_BYTES, 0, 0);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(-1, EMPTY_BYTES, 0, 0));
     }
 
     @Test
@@ -318,44 +321,44 @@ public abstract class AbstractByteBufTest {
         assertEquals(0, dst[3]);
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getByteBufferBoundaryCheck() {
-        buffer.getBytes(-1, ByteBuffer.allocate(0));
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(-1, ByteBuffer.allocate(0)));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void copyBoundaryCheck1() {
-        buffer.copy(-1, 0);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.copy(-1, 0));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void copyBoundaryCheck2() {
-        buffer.copy(0, buffer.capacity() + 1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.copy(0, buffer.capacity() + 1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void copyBoundaryCheck3() {
-        buffer.copy(buffer.capacity() + 1, 0);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.copy(buffer.capacity() + 1, 0));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void copyBoundaryCheck4() {
-        buffer.copy(buffer.capacity(), 1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.copy(buffer.capacity(), 1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void setIndexBoundaryCheck1() {
-        buffer.setIndex(-1, CAPACITY);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.setIndex(-1, CAPACITY));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void setIndexBoundaryCheck2() {
-        buffer.setIndex(CAPACITY / 2, CAPACITY / 4);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.setIndex(CAPACITY / 2, CAPACITY / 4));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void setIndexBoundaryCheck3() {
-        buffer.setIndex(0, CAPACITY + 1);
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.setIndex(0, CAPACITY + 1));
     }
 
     @Test
@@ -380,9 +383,9 @@ public abstract class AbstractByteBufTest {
         assertEquals(0, dst.get(3));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void getDirectByteBufferBoundaryCheck() {
-        buffer.getBytes(-1, ByteBuffer.allocateDirect(0));
+        assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(-1, ByteBuffer.allocateDirect(0)));
     }
 
     @Test
@@ -2080,7 +2083,8 @@ public abstract class AbstractByteBufTest {
         copied.release();
     }
 
-    @Test(timeout = 10000)
+    @Test
+    @Timeout(value = 10000, unit = TimeUnit.MILLISECONDS)
     public void testToStringMultipleThreads() throws Throwable {
         buffer.clear();
         buffer.writeBytes("Hello, World!".getBytes(CharsetUtil.ISO_8859_1));
@@ -2115,8 +2119,41 @@ public abstract class AbstractByteBufTest {
     }
 
     @Test
+    public void testSWARIndexOf() {
+        ByteBuf buffer = newBuffer(16);
+        buffer.clear();
+        // Ensure the buffer is completely zero'ed.
+        buffer.setZero(0, buffer.capacity());
+        buffer.writeByte((byte) 0); // 0
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 0); // 7
+
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 0);
+        buffer.writeByte((byte) 1); // 11
+        buffer.writeByte((byte) 2);
+        buffer.writeByte((byte) 3);
+        buffer.writeByte((byte) 4);
+        buffer.writeByte((byte) 1);
+        assertEquals(11, buffer.indexOf(0, 12, (byte) 1));
+        assertEquals(12, buffer.indexOf(0, 16, (byte) 2));
+        assertEquals(-1, buffer.indexOf(0, 11, (byte) 1));
+        assertEquals(11, buffer.indexOf(0, 16, (byte) 1));
+        buffer.release();
+    }
+
+    @Test
     public void testIndexOf() {
         buffer.clear();
+        // Ensure the buffer is completely zero'ed.
+        buffer.setZero(0, buffer.capacity());
+
         buffer.writeByte((byte) 1);
         buffer.writeByte((byte) 2);
         buffer.writeByte((byte) 3);
@@ -2127,6 +2164,38 @@ public abstract class AbstractByteBufTest {
         assertEquals(-1, buffer.indexOf(4, 1, (byte) 1));
         assertEquals(1, buffer.indexOf(1, 4, (byte) 2));
         assertEquals(3, buffer.indexOf(4, 1, (byte) 2));
+
+        try {
+            buffer.indexOf(0, buffer.capacity() + 1, (byte) 0);
+            fail();
+        } catch (IndexOutOfBoundsException expected) {
+            // expected
+        }
+
+        try {
+            buffer.indexOf(buffer.capacity(), -1, (byte) 0);
+            fail();
+        } catch (IndexOutOfBoundsException expected) {
+            // expected
+        }
+
+        assertEquals(4, buffer.indexOf(buffer.capacity() + 1, 0, (byte) 1));
+        assertEquals(0, buffer.indexOf(-1, buffer.capacity(), (byte) 1));
+    }
+
+    @Test
+    public void testIndexOfReleaseBuffer() {
+        ByteBuf buffer = releasedBuffer();
+        if (buffer.capacity() != 0) {
+            try {
+                buffer.indexOf(0, 1, (byte) 1);
+                fail();
+            } catch (IllegalReferenceCountException expected) {
+                // expected
+            }
+        } else {
+            assertEquals(-1, buffer.indexOf(0, 1, (byte) 1));
+        }
     }
 
     @Test
@@ -2249,7 +2318,7 @@ public abstract class AbstractByteBufTest {
             int i = CAPACITY / 4;
 
             @Override
-            public boolean process(byte value) throws Exception {
+            public boolean process(byte value) {
                 assertThat(value, is((byte) (i + 1)));
                 lastIndex.set(i);
                 i ++;
@@ -2272,7 +2341,7 @@ public abstract class AbstractByteBufTest {
             int i = CAPACITY / 3;
 
             @Override
-            public boolean process(byte value) throws Exception {
+            public boolean process(byte value) {
                 assertThat(value, is((byte) (i + 1)));
                 if (i == stop) {
                     return false;
@@ -2493,13 +2562,15 @@ public abstract class AbstractByteBufTest {
         buffer.release();
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void readByteThrowsIndexOutOfBoundsException() {
         final ByteBuf buffer = newBuffer(8);
         try {
-            buffer.writeByte(0);
-            assertEquals((byte) 0, buffer.readByte());
-            buffer.readByte();
+            assertThrows(IndexOutOfBoundsException.class, () -> {
+                buffer.writeByte(0);
+                assertEquals((byte) 0, buffer.readByte());
+                buffer.readByte();
+            });
         } finally {
             buffer.release();
         }
@@ -2553,7 +2624,6 @@ public abstract class AbstractByteBufTest {
 
     private ByteBuf releasedBuffer() {
         ByteBuf buffer = newBuffer(8);
-
         // Clear the buffer so we are sure the reader and writer indices are 0.
         // This is important as we may return a slice from newBuffer(...).
         buffer.clear();
@@ -2561,718 +2631,742 @@ public abstract class AbstractByteBufTest {
         return buffer;
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testDiscardReadBytesAfterRelease() {
-        releasedBuffer().discardReadBytes();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().discardReadBytes());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testDiscardSomeReadBytesAfterRelease() {
-        releasedBuffer().discardSomeReadBytes();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().discardSomeReadBytes());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testEnsureWritableAfterRelease() {
-        releasedBuffer().ensureWritable(16);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().ensureWritable(16));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetBooleanAfterRelease() {
-        releasedBuffer().getBoolean(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getBoolean(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetByteAfterRelease() {
-        releasedBuffer().getByte(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getByte(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetUnsignedByteAfterRelease() {
-        releasedBuffer().getUnsignedByte(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getUnsignedByte(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetShortAfterRelease() {
-        releasedBuffer().getShort(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getShort(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetShortLEAfterRelease() {
-        releasedBuffer().getShortLE(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getShortLE(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetUnsignedShortAfterRelease() {
-        releasedBuffer().getUnsignedShort(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getUnsignedShort(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetUnsignedShortLEAfterRelease() {
-        releasedBuffer().getUnsignedShortLE(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getUnsignedShortLE(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetMediumAfterRelease() {
-        releasedBuffer().getMedium(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getMedium(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetMediumLEAfterRelease() {
-        releasedBuffer().getMediumLE(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getMediumLE(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetUnsignedMediumAfterRelease() {
-        releasedBuffer().getUnsignedMedium(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getUnsignedMedium(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetIntAfterRelease() {
-        releasedBuffer().getInt(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getInt(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetIntLEAfterRelease() {
-        releasedBuffer().getIntLE(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getIntLE(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetUnsignedIntAfterRelease() {
-        releasedBuffer().getUnsignedInt(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getUnsignedInt(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetUnsignedIntLEAfterRelease() {
-        releasedBuffer().getUnsignedIntLE(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getUnsignedIntLE(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetLongAfterRelease() {
-        releasedBuffer().getLong(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getLong(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetLongLEAfterRelease() {
-        releasedBuffer().getLongLE(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getLongLE(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetCharAfterRelease() {
-        releasedBuffer().getChar(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getChar(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetFloatAfterRelease() {
-        releasedBuffer().getFloat(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getFloat(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetFloatLEAfterRelease() {
-        releasedBuffer().getFloatLE(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getFloatLE(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetDoubleAfterRelease() {
-        releasedBuffer().getDouble(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getDouble(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetDoubleLEAfterRelease() {
-        releasedBuffer().getDoubleLE(0);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getDoubleLE(0));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetBytesAfterRelease() {
         ByteBuf buffer = buffer(8);
         try {
-            releasedBuffer().getBytes(0, buffer);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getBytes(0, buffer));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetBytesAfterRelease2() {
         ByteBuf buffer = buffer();
         try {
-            releasedBuffer().getBytes(0, buffer, 1);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getBytes(0, buffer, 1));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetBytesAfterRelease3() {
         ByteBuf buffer = buffer();
         try {
-            releasedBuffer().getBytes(0, buffer, 0, 1);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getBytes(0, buffer, 0, 1));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetBytesAfterRelease4() {
-        releasedBuffer().getBytes(0, new byte[8]);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getBytes(0, new byte[8]));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetBytesAfterRelease5() {
-        releasedBuffer().getBytes(0, new byte[8], 0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getBytes(0, new byte[8], 0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testGetBytesAfterRelease6() {
-        releasedBuffer().getBytes(0, ByteBuffer.allocate(8));
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().getBytes(0, ByteBuffer.allocate(8)));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testGetBytesAfterRelease7() throws IOException {
-        releasedBuffer().getBytes(0, new ByteArrayOutputStream(), 1);
+    @Test
+    public void testGetBytesAfterRelease7() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().getBytes(0, new ByteArrayOutputStream(), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testGetBytesAfterRelease8() throws IOException {
-        releasedBuffer().getBytes(0, new DevNullGatheringByteChannel(), 1);
+    @Test
+    public void testGetBytesAfterRelease8() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().getBytes(0, new DevNullGatheringByteChannel(), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetBooleanAfterRelease() {
-        releasedBuffer().setBoolean(0, true);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setBoolean(0, true));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetByteAfterRelease() {
-        releasedBuffer().setByte(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setByte(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetShortAfterRelease() {
-        releasedBuffer().setShort(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setShort(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetShortLEAfterRelease() {
-        releasedBuffer().setShortLE(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setShortLE(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetMediumAfterRelease() {
-        releasedBuffer().setMedium(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setMedium(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetMediumLEAfterRelease() {
-        releasedBuffer().setMediumLE(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setMediumLE(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetIntAfterRelease() {
-        releasedBuffer().setInt(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setInt(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetIntLEAfterRelease() {
-        releasedBuffer().setIntLE(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setIntLE(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetLongAfterRelease() {
-        releasedBuffer().setLong(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setLong(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetLongLEAfterRelease() {
-        releasedBuffer().setLongLE(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setLongLE(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetCharAfterRelease() {
-        releasedBuffer().setChar(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setChar(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetFloatAfterRelease() {
-        releasedBuffer().setFloat(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setFloat(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetDoubleAfterRelease() {
-        releasedBuffer().setDouble(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setDouble(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetBytesAfterRelease() {
         ByteBuf buffer = buffer();
         try {
-            releasedBuffer().setBytes(0, buffer);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setBytes(0, buffer));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetBytesAfterRelease2() {
         ByteBuf buffer = buffer();
         try {
-            releasedBuffer().setBytes(0, buffer, 1);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setBytes(0, buffer, 1));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetBytesAfterRelease3() {
         ByteBuf buffer = buffer();
         try {
-            releasedBuffer().setBytes(0, buffer, 0, 1);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setBytes(0, buffer, 0, 1));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetUsAsciiCharSequenceAfterRelease() {
-        testSetCharSequenceAfterRelease0(CharsetUtil.US_ASCII);
+        assertThrows(IllegalReferenceCountException.class,
+            () -> testSetCharSequenceAfterRelease0(CharsetUtil.US_ASCII));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetIso88591CharSequenceAfterRelease() {
-        testSetCharSequenceAfterRelease0(CharsetUtil.ISO_8859_1);
+        assertThrows(IllegalReferenceCountException.class,
+            () -> testSetCharSequenceAfterRelease0(CharsetUtil.ISO_8859_1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetUtf8CharSequenceAfterRelease() {
-        testSetCharSequenceAfterRelease0(CharsetUtil.UTF_8);
+        assertThrows(IllegalReferenceCountException.class,
+            () -> testSetCharSequenceAfterRelease0(CharsetUtil.UTF_8));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetUtf16CharSequenceAfterRelease() {
-        testSetCharSequenceAfterRelease0(CharsetUtil.UTF_16);
+        assertThrows(IllegalReferenceCountException.class,
+            () -> testSetCharSequenceAfterRelease0(CharsetUtil.UTF_16));
     }
 
     private void testSetCharSequenceAfterRelease0(Charset charset) {
         releasedBuffer().setCharSequence(0, "x", charset);
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetBytesAfterRelease4() {
-        releasedBuffer().setBytes(0, new byte[8]);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setBytes(0, new byte[8]));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetBytesAfterRelease5() {
-        releasedBuffer().setBytes(0, new byte[8], 0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setBytes(0, new byte[8], 0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetBytesAfterRelease6() {
-        releasedBuffer().setBytes(0, ByteBuffer.allocate(8));
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setBytes(0, ByteBuffer.allocate(8)));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testSetBytesAfterRelease7() throws IOException {
-        releasedBuffer().setBytes(0, new ByteArrayInputStream(new byte[8]), 1);
+    @Test
+    public void testSetBytesAfterRelease7() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().setBytes(0, new ByteArrayInputStream(new byte[8]), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testSetBytesAfterRelease8() throws IOException {
-        releasedBuffer().setBytes(0, new TestScatteringByteChannel(), 1);
+    @Test
+    public void testSetBytesAfterRelease8() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().setBytes(0, new TestScatteringByteChannel(), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSetZeroAfterRelease() {
-        releasedBuffer().setZero(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().setZero(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadBooleanAfterRelease() {
-        releasedBuffer().readBoolean();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readBoolean());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadByteAfterRelease() {
-        releasedBuffer().readByte();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readByte());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadUnsignedByteAfterRelease() {
-        releasedBuffer().readUnsignedByte();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readUnsignedByte());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadShortAfterRelease() {
-        releasedBuffer().readShort();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readShort());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadShortLEAfterRelease() {
-        releasedBuffer().readShortLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readShortLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadUnsignedShortAfterRelease() {
-        releasedBuffer().readUnsignedShort();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readUnsignedShort());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadUnsignedShortLEAfterRelease() {
-        releasedBuffer().readUnsignedShortLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readUnsignedShortLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadMediumAfterRelease() {
-        releasedBuffer().readMedium();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readMedium());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadMediumLEAfterRelease() {
-        releasedBuffer().readMediumLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readMediumLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadUnsignedMediumAfterRelease() {
-        releasedBuffer().readUnsignedMedium();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readUnsignedMedium());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadUnsignedMediumLEAfterRelease() {
-        releasedBuffer().readUnsignedMediumLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readUnsignedMediumLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadIntAfterRelease() {
-        releasedBuffer().readInt();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readInt());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadIntLEAfterRelease() {
-        releasedBuffer().readIntLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readIntLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadUnsignedIntAfterRelease() {
-        releasedBuffer().readUnsignedInt();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readUnsignedInt());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadUnsignedIntLEAfterRelease() {
-        releasedBuffer().readUnsignedIntLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readUnsignedIntLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadLongAfterRelease() {
-        releasedBuffer().readLong();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readLong());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadLongLEAfterRelease() {
-        releasedBuffer().readLongLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readLongLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadCharAfterRelease() {
-        releasedBuffer().readChar();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readChar());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadFloatAfterRelease() {
-        releasedBuffer().readFloat();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readFloat());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadFloatLEAfterRelease() {
-        releasedBuffer().readFloatLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readFloatLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadDoubleAfterRelease() {
-        releasedBuffer().readDouble();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readDouble());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadDoubleLEAfterRelease() {
-        releasedBuffer().readDoubleLE();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readDoubleLE());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadBytesAfterRelease() {
-        releasedBuffer().readBytes(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readBytes(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadBytesAfterRelease2() {
         ByteBuf buffer = buffer(8);
         try {
-            releasedBuffer().readBytes(buffer);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readBytes(buffer));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadBytesAfterRelease3() {
         ByteBuf buffer = buffer(8);
         try {
-            releasedBuffer().readBytes(buffer);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readBytes(buffer));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadBytesAfterRelease4() {
         ByteBuf buffer = buffer(8);
         try {
-            releasedBuffer().readBytes(buffer, 0, 1);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readBytes(buffer, 0, 1));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadBytesAfterRelease5() {
-        releasedBuffer().readBytes(new byte[8]);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readBytes(new byte[8]));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadBytesAfterRelease6() {
-        releasedBuffer().readBytes(new byte[8], 0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readBytes(new byte[8], 0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testReadBytesAfterRelease7() {
-        releasedBuffer().readBytes(ByteBuffer.allocate(8));
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().readBytes(ByteBuffer.allocate(8)));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testReadBytesAfterRelease8() throws IOException {
-        releasedBuffer().readBytes(new ByteArrayOutputStream(), 1);
+    @Test
+    public void testReadBytesAfterRelease8() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().readBytes(new ByteArrayOutputStream(), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testReadBytesAfterRelease9() throws IOException {
-        releasedBuffer().readBytes(new ByteArrayOutputStream(), 1);
+    @Test
+    public void testReadBytesAfterRelease9() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().readBytes(new ByteArrayOutputStream(), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testReadBytesAfterRelease10() throws IOException {
-        releasedBuffer().readBytes(new DevNullGatheringByteChannel(), 1);
+    @Test
+    public void testReadBytesAfterRelease10() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().readBytes(new DevNullGatheringByteChannel(), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteBooleanAfterRelease() {
-        releasedBuffer().writeBoolean(true);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeBoolean(true));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteByteAfterRelease() {
-        releasedBuffer().writeByte(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeByte(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteShortAfterRelease() {
-        releasedBuffer().writeShort(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeShort(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteShortLEAfterRelease() {
-        releasedBuffer().writeShortLE(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeShortLE(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteMediumAfterRelease() {
-        releasedBuffer().writeMedium(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeMedium(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteMediumLEAfterRelease() {
-        releasedBuffer().writeMediumLE(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeMediumLE(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteIntAfterRelease() {
-        releasedBuffer().writeInt(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeInt(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteIntLEAfterRelease() {
-        releasedBuffer().writeIntLE(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeIntLE(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteLongAfterRelease() {
-        releasedBuffer().writeLong(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeLong(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteLongLEAfterRelease() {
-        releasedBuffer().writeLongLE(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeLongLE(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteCharAfterRelease() {
-        releasedBuffer().writeChar(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeChar(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteFloatAfterRelease() {
-        releasedBuffer().writeFloat(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeFloat(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteFloatLEAfterRelease() {
-        releasedBuffer().writeFloatLE(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeFloatLE(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteDoubleAfterRelease() {
-        releasedBuffer().writeDouble(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeDouble(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteDoubleLEAfterRelease() {
-        releasedBuffer().writeDoubleLE(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeDoubleLE(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteBytesAfterRelease() {
         ByteBuf buffer = buffer(8);
         try {
-            releasedBuffer().writeBytes(buffer);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeBytes(buffer));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteBytesAfterRelease2() {
         ByteBuf buffer = copiedBuffer(new byte[8]);
         try {
-            releasedBuffer().writeBytes(buffer, 1);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeBytes(buffer, 1));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteBytesAfterRelease3() {
         ByteBuf buffer = buffer(8);
         try {
-            releasedBuffer().writeBytes(buffer, 0, 1);
+            assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeBytes(buffer, 0, 1));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteBytesAfterRelease4() {
-        releasedBuffer().writeBytes(new byte[8]);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeBytes(new byte[8]));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteBytesAfterRelease5() {
-        releasedBuffer().writeBytes(new byte[8], 0 , 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeBytes(new byte[8], 0 , 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteBytesAfterRelease6() {
-        releasedBuffer().writeBytes(ByteBuffer.allocate(8));
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeBytes(ByteBuffer.allocate(8)));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testWriteBytesAfterRelease7() throws IOException {
-        releasedBuffer().writeBytes(new ByteArrayInputStream(new byte[8]), 1);
+    @Test
+    public void testWriteBytesAfterRelease7() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().writeBytes(new ByteArrayInputStream(new byte[8]), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
-    public void testWriteBytesAfterRelease8() throws IOException {
-        releasedBuffer().writeBytes(new TestScatteringByteChannel(), 1);
+    @Test
+    public void testWriteBytesAfterRelease8() {
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().writeBytes(new TestScatteringByteChannel(), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteZeroAfterRelease() throws IOException {
-        releasedBuffer().writeZero(1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().writeZero(1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteUsAsciiCharSequenceAfterRelease() {
-        testWriteCharSequenceAfterRelease0(CharsetUtil.US_ASCII);
+        assertThrows(IllegalReferenceCountException.class,
+            () -> testWriteCharSequenceAfterRelease0(CharsetUtil.US_ASCII));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteIso88591CharSequenceAfterRelease() {
-        testWriteCharSequenceAfterRelease0(CharsetUtil.ISO_8859_1);
+        assertThrows(IllegalReferenceCountException.class,
+            () -> testWriteCharSequenceAfterRelease0(CharsetUtil.ISO_8859_1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteUtf8CharSequenceAfterRelease() {
-        testWriteCharSequenceAfterRelease0(CharsetUtil.UTF_8);
+        assertThrows(IllegalReferenceCountException.class, () -> testWriteCharSequenceAfterRelease0(CharsetUtil.UTF_8));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testWriteUtf16CharSequenceAfterRelease() {
-        testWriteCharSequenceAfterRelease0(CharsetUtil.UTF_16);
+        assertThrows(IllegalReferenceCountException.class,
+            () -> testWriteCharSequenceAfterRelease0(CharsetUtil.UTF_16));
     }
 
     private void testWriteCharSequenceAfterRelease0(Charset charset) {
         releasedBuffer().writeCharSequence("x", charset);
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testForEachByteAfterRelease() {
-        releasedBuffer().forEachByte(new TestByteProcessor());
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().forEachByte(new TestByteProcessor()));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testForEachByteAfterRelease1() {
-        releasedBuffer().forEachByte(0, 1, new TestByteProcessor());
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().forEachByte(0, 1, new TestByteProcessor()));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testForEachByteDescAfterRelease() {
-        releasedBuffer().forEachByteDesc(new TestByteProcessor());
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().forEachByteDesc(new TestByteProcessor()));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testForEachByteDescAfterRelease1() {
-        releasedBuffer().forEachByteDesc(0, 1, new TestByteProcessor());
+        assertThrows(IllegalReferenceCountException.class,
+            () -> releasedBuffer().forEachByteDesc(0, 1, new TestByteProcessor()));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testCopyAfterRelease() {
-        releasedBuffer().copy();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().copy());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testCopyAfterRelease1() {
-        releasedBuffer().copy();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().copy());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testNioBufferAfterRelease() {
-        releasedBuffer().nioBuffer();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().nioBuffer());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testNioBufferAfterRelease1() {
-        releasedBuffer().nioBuffer(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().nioBuffer(0, 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testInternalNioBufferAfterRelease() {
+        testInternalNioBufferAfterRelease0(IllegalReferenceCountException.class);
+    }
+
+    protected void testInternalNioBufferAfterRelease0(final Class<? extends Throwable> expectedException) {
         ByteBuf releasedBuffer = releasedBuffer();
-        releasedBuffer.internalNioBuffer(releasedBuffer.readerIndex(), 1);
+        assertThrows(expectedException, () -> releasedBuffer.internalNioBuffer(releasedBuffer.readerIndex(), 1));
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testNioBuffersAfterRelease() {
-        releasedBuffer().nioBuffers();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().nioBuffers());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testNioBuffersAfterRelease2() {
-        releasedBuffer().nioBuffers(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().nioBuffers(0, 1));
     }
 
     @Test
@@ -3301,14 +3395,14 @@ public abstract class AbstractByteBufTest {
         }
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSliceAfterRelease() {
-        releasedBuffer().slice();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().slice());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testSliceAfterRelease2() {
-        releasedBuffer().slice(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().slice(0, 1));
     }
 
     private static void assertSliceFailAfterRelease(ByteBuf... bufs) {
@@ -3366,14 +3460,14 @@ public abstract class AbstractByteBufTest {
         assertSliceFailAfterRelease(buf, buf2, buf3);
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testRetainedSliceAfterRelease() {
-        releasedBuffer().retainedSlice();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().retainedSlice());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testRetainedSliceAfterRelease2() {
-        releasedBuffer().retainedSlice(0, 1);
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().retainedSlice(0, 1));
     }
 
     private static void assertRetainedSliceFailAfterRelease(ByteBuf... bufs) {
@@ -3431,14 +3525,14 @@ public abstract class AbstractByteBufTest {
         assertRetainedSliceFailAfterRelease(buf, buf2, buf3);
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testDuplicateAfterRelease() {
-        releasedBuffer().duplicate();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().duplicate());
     }
 
-    @Test(expected = IllegalReferenceCountException.class)
+    @Test
     public void testRetainedDuplicateAfterRelease() {
-        releasedBuffer().retainedDuplicate();
+        assertThrows(IllegalReferenceCountException.class, () -> releasedBuffer().retainedDuplicate());
     }
 
     private static void assertDuplicateFailAfterRelease(ByteBuf... bufs) {
@@ -3527,14 +3621,14 @@ public abstract class AbstractByteBufTest {
         assertEquals(0, buf.refCnt());
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testReadSliceOutOfBounds() {
-        testReadSliceOutOfBounds(false);
+        assertThrows(IndexOutOfBoundsException.class, () -> testReadSliceOutOfBounds(false));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testReadRetainedSliceOutOfBounds() {
-        testReadSliceOutOfBounds(true);
+        assertThrows(IndexOutOfBoundsException.class, () -> testReadSliceOutOfBounds(true));
     }
 
     private void testReadSliceOutOfBounds(boolean retainedSlice) {
@@ -3583,24 +3677,24 @@ public abstract class AbstractByteBufTest {
         }
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testSetUsAsciiCharSequenceNoExpand() {
-        testSetCharSequenceNoExpand(CharsetUtil.US_ASCII);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSetCharSequenceNoExpand(CharsetUtil.US_ASCII));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testSetUtf8CharSequenceNoExpand() {
-        testSetCharSequenceNoExpand(CharsetUtil.UTF_8);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSetCharSequenceNoExpand(CharsetUtil.UTF_8));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testSetIso88591CharSequenceNoExpand() {
-        testSetCharSequenceNoExpand(CharsetUtil.ISO_8859_1);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSetCharSequenceNoExpand(CharsetUtil.ISO_8859_1));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testSetUtf16CharSequenceNoExpand() {
-        testSetCharSequenceNoExpand(CharsetUtil.UTF_16);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSetCharSequenceNoExpand(CharsetUtil.UTF_16));
     }
 
     private void testSetCharSequenceNoExpand(Charset charset) {
@@ -3683,44 +3777,44 @@ public abstract class AbstractByteBufTest {
         buf.release();
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testRetainedSliceIndexOutOfBounds() {
-        testSliceOutOfBounds(true, true, true);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSliceOutOfBounds(true, true, true));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testRetainedSliceLengthOutOfBounds() {
-        testSliceOutOfBounds(true, true, false);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSliceOutOfBounds(true, true, false));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testMixedSliceAIndexOutOfBounds() {
-        testSliceOutOfBounds(true, false, true);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSliceOutOfBounds(true, false, true));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testMixedSliceALengthOutOfBounds() {
-        testSliceOutOfBounds(true, false, false);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSliceOutOfBounds(true, false, false));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testMixedSliceBIndexOutOfBounds() {
-        testSliceOutOfBounds(false, true, true);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSliceOutOfBounds(false, true, true));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testMixedSliceBLengthOutOfBounds() {
-        testSliceOutOfBounds(false, true, false);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSliceOutOfBounds(false, true, false));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testSliceIndexOutOfBounds() {
-        testSliceOutOfBounds(false, false, true);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSliceOutOfBounds(false, false, true));
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testSliceLengthOutOfBounds() {
-        testSliceOutOfBounds(false, false, false);
+        assertThrows(IndexOutOfBoundsException.class, () -> testSliceOutOfBounds(false, false, false));
     }
 
     @Test
@@ -3976,14 +4070,14 @@ public abstract class AbstractByteBufTest {
         testDuplicateCapacityChange(true);
     }
 
-    @Test(expected = UnsupportedOperationException.class)
+    @Test
     public void testSliceCapacityChange() {
-        testSliceCapacityChange(false);
+        assertThrows(UnsupportedOperationException.class, () -> testSliceCapacityChange(false));
     }
 
-    @Test(expected = UnsupportedOperationException.class)
+    @Test
     public void testRetainedSliceCapacityChange() {
-        testSliceCapacityChange(true);
+        assertThrows(UnsupportedOperationException.class, () -> testSliceCapacityChange(true));
     }
 
     @Test
@@ -4470,7 +4564,7 @@ public abstract class AbstractByteBufTest {
 
     @Test
     public void testReadBytesAndWriteBytesWithFileChannel() throws IOException {
-        File file = File.createTempFile("file-channel", ".tmp");
+        File file = PlatformDependent.createTempFile("file-channel", ".tmp", null);
         RandomAccessFile randomAccessFile = null;
         try {
             randomAccessFile = new RandomAccessFile(file, "rw");
@@ -4509,7 +4603,7 @@ public abstract class AbstractByteBufTest {
 
     @Test
     public void testGetBytesAndSetBytesWithFileChannel() throws IOException {
-        File file = File.createTempFile("file-channel", ".tmp");
+        File file = PlatformDependent.createTempFile("file-channel", ".tmp", null);
         RandomAccessFile randomAccessFile = null;
         try {
             randomAccessFile = new RandomAccessFile(file, "rw");
@@ -4574,7 +4668,7 @@ public abstract class AbstractByteBufTest {
                 private int index = bytes.length - 1;
 
                 @Override
-                public boolean process(byte value) throws Exception {
+                public boolean process(byte value) {
                     bytes[index--] = value;
                     return true;
                 }
@@ -4597,7 +4691,7 @@ public abstract class AbstractByteBufTest {
                 private int index;
 
                 @Override
-                public boolean process(byte value) throws Exception {
+                public boolean process(byte value) {
                     bytes[index++] = value;
                     return true;
                 }
@@ -4609,7 +4703,7 @@ public abstract class AbstractByteBufTest {
         }
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testGetBytesByteBuffer() {
         byte[] bytes = {'a', 'b', 'c', 'd', 'e', 'f', 'g'};
         // Ensure destination buffer is bigger then what is in the ByteBuf.
@@ -4617,7 +4711,7 @@ public abstract class AbstractByteBufTest {
         ByteBuf buffer = newBuffer(bytes.length);
         try {
             buffer.writeBytes(bytes);
-            buffer.getBytes(buffer.readerIndex(), nioBuffer);
+            assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(buffer.readerIndex(), nioBuffer));
         } finally {
             buffer.release();
         }
@@ -4770,30 +4864,30 @@ public abstract class AbstractByteBufTest {
 
     private static final class TestByteProcessor implements ByteProcessor {
         @Override
-        public boolean process(byte value) throws Exception {
+        public boolean process(byte value) {
             return true;
         }
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testCapacityEnforceMaxCapacity() {
         ByteBuf buffer = newBuffer(3, 13);
         assertEquals(13, buffer.maxCapacity());
         assertEquals(3, buffer.capacity());
         try {
-            buffer.capacity(14);
+            assertThrows(IllegalArgumentException.class, () -> buffer.capacity(14));
         } finally {
             buffer.release();
         }
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testCapacityNegative() {
         ByteBuf buffer = newBuffer(3, 13);
         assertEquals(13, buffer.maxCapacity());
         assertEquals(3, buffer.capacity());
         try {
-            buffer.capacity(-1);
+            assertThrows(IllegalArgumentException.class, () -> buffer.capacity(-1));
         } finally {
             buffer.release();
         }
@@ -4827,7 +4921,7 @@ public abstract class AbstractByteBufTest {
         }
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testReaderIndexLargerThanWriterIndex() {
         String content1 = "hello";
         String content2 = "world";
@@ -4841,7 +4935,7 @@ public abstract class AbstractByteBufTest {
         assertTrue(buffer.readerIndex() <= buffer.writerIndex());
 
         try {
-            buffer.readerIndex(buffer.writerIndex() + 1);
+            assertThrows(IndexOutOfBoundsException.class, () -> buffer.readerIndex(buffer.writerIndex() + 1));
         } finally {
             buffer.release();
         }
@@ -4857,5 +4951,79 @@ public abstract class AbstractByteBufTest {
         // Default implementation has fast writable == writable
         assertEquals(50, buffer.maxFastWritableBytes());
         buffer.release();
+    }
+
+    @Test
+    public void testEnsureWritableIntegerOverflow() {
+        ByteBuf buffer = newBuffer(CAPACITY);
+        buffer.writerIndex(buffer.readerIndex());
+        buffer.writeByte(1);
+        try {
+            buffer.ensureWritable(Integer.MAX_VALUE);
+            fail();
+        } catch (IndexOutOfBoundsException e) {
+            // expected
+        } finally {
+            buffer.release();
+        }
+    }
+
+    @Test
+    public void testEndiannessIndexOf() {
+        buffer.clear();
+        final int v = 0x02030201;
+        buffer.writeIntLE(v);
+        buffer.writeByte(0x01);
+
+        assertEquals(-1, buffer.indexOf(1, 4, (byte) 1));
+        assertEquals(-1, buffer.indexOf(4, 1, (byte) 1));
+        assertEquals(1, buffer.indexOf(1, 4, (byte) 2));
+        assertEquals(3, buffer.indexOf(4, 1, (byte) 2));
+    }
+
+    @Test
+    public void explicitLittleEndianReadMethodsMustAlwaysUseLittleEndianByteOrder() {
+        buffer.clear();
+        buffer.writeBytes(new byte[] {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08});
+        assertEquals(0x0201, buffer.readShortLE());
+        buffer.readerIndex(0);
+        assertEquals(0x0201, buffer.readUnsignedShortLE());
+        buffer.readerIndex(0);
+        assertEquals(0x030201, buffer.readMediumLE());
+        buffer.readerIndex(0);
+        assertEquals(0x030201, buffer.readUnsignedMediumLE());
+        buffer.readerIndex(0);
+        assertEquals(0x04030201, buffer.readIntLE());
+        buffer.readerIndex(0);
+        assertEquals(0x04030201, buffer.readUnsignedIntLE());
+        buffer.readerIndex(0);
+        assertEquals(0x04030201, Float.floatToRawIntBits(buffer.readFloatLE()));
+        buffer.readerIndex(0);
+        assertEquals(0x0807060504030201L, buffer.readLongLE());
+        buffer.readerIndex(0);
+        assertEquals(0x0807060504030201L, Double.doubleToRawLongBits(buffer.readDoubleLE()));
+        buffer.readerIndex(0);
+    }
+
+    @Test
+    public void explicitLittleEndianWriteMethodsMustAlwaysUseLittleEndianByteOrder() {
+        buffer.clear();
+        buffer.writeShortLE(0x0102);
+        assertEquals(0x0102, buffer.readShortLE());
+        buffer.clear();
+        buffer.writeMediumLE(0x010203);
+        assertEquals(0x010203, buffer.readMediumLE());
+        buffer.clear();
+        buffer.writeIntLE(0x01020304);
+        assertEquals(0x01020304, buffer.readIntLE());
+        buffer.clear();
+        buffer.writeFloatLE(Float.intBitsToFloat(0x01020304));
+        assertEquals(0x01020304, Float.floatToRawIntBits(buffer.readFloatLE()));
+        buffer.clear();
+        buffer.writeLongLE(0x0102030405060708L);
+        assertEquals(0x0102030405060708L, buffer.readLongLE());
+        buffer.clear();
+        buffer.writeDoubleLE(Double.longBitsToDouble(0x0102030405060708L));
+        assertEquals(0x0102030405060708L, Double.doubleToRawLongBits(buffer.readDoubleLE()));
     }
 }

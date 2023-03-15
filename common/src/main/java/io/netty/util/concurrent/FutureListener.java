@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,13 +16,22 @@
 
 package io.netty.util.concurrent;
 
+import java.util.EventListener;
+
 /**
- * A subtype of {@link GenericFutureListener} that hides type parameter for convenience.
+ * Listens to the result of a {@link Future}.  The result of the asynchronous operation is notified once this listener
+ * is added by calling {@link Future#addListener(FutureListener)}.
  * <pre>
  * Future f = new DefaultPromise(..);
- * f.addListener(new FutureListener() {
- *     public void operationComplete(Future f) { .. }
- * });
+ * f.addListener(future -> { .. });
  * </pre>
  */
-public interface FutureListener<V> extends GenericFutureListener<Future<V>> { }
+@FunctionalInterface
+public interface FutureListener<V> {
+    /**
+     * Invoked when the operation associated with the {@link Future} has been completed.
+     *
+     * @param future  the source {@link Future} which called this callback
+     */
+    void operationComplete(Future<? extends V> future) throws Exception;
+}

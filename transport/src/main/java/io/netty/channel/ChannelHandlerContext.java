@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,9 +20,6 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.AttributeMap;
-import io.netty.util.concurrent.EventExecutor;
-
-import java.nio.channels.Channels;
 
 /**
  * Enables a {@link ChannelHandler} to interact with its {@link ChannelPipeline}
@@ -82,7 +79,7 @@ import java.nio.channels.Channels;
  * as how many times it is added to pipelines, regardless if it is added to the
  * same pipeline multiple times or added to different pipelines multiple times:
  * <pre>
- * public class FactorialHandler implements {@link ChannelInboundHandler} {
+ * public class FactorialHandler implements {@link ChannelHandler} {
  *
  *   private final {@link AttributeKey}&lt;{@link Integer}&gt; counter = {@link AttributeKey}.valueOf("counter");
  *
@@ -106,11 +103,11 @@ import java.nio.channels.Channels;
  * // calculated correctly 4 times once the two pipelines (p1 and p2) are active.
  * FactorialHandler fh = new FactorialHandler();
  *
- * {@link ChannelPipeline} p1 = {@link Channels}.pipeline();
+ * {@link ChannelPipeline} p1 = {@link Channel}.pipeline();
  * p1.addLast("f1", fh);
  * p1.addLast("f2", fh);
  *
- * {@link ChannelPipeline} p2 = {@link Channels}.pipeline();
+ * {@link ChannelPipeline} p2 = {@link Channel}.pipeline();
  * p2.addLast("f3", fh);
  * p2.addLast("f4", fh);
  * </pre>
@@ -128,11 +125,6 @@ public interface ChannelHandlerContext extends AttributeMap, ChannelInboundInvok
      * Return the {@link Channel} which is bound to the {@link ChannelHandlerContext}.
      */
     Channel channel();
-
-    /**
-     * Returns the {@link EventExecutor} which is used to execute an arbitrary task.
-     */
-    EventExecutor executor();
 
     /**
      * The unique name of the {@link ChannelHandlerContext}.The name was used when then {@link ChannelHandler}

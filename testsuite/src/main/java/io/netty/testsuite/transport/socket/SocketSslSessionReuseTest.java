@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,8 +21,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelHandler.Sharable;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.SocketChannel;
@@ -33,15 +33,13 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLSessionContext;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -51,11 +49,11 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@RunWith(Parameterized.class)
 public class SocketSslSessionReuseTest extends AbstractSocketTest {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(SocketSslSessionReuseTest.class);
@@ -74,7 +72,6 @@ public class SocketSslSessionReuseTest extends AbstractSocketTest {
         KEY_FILE = ssc.privateKey();
     }
 
-    @Parameters(name = "{index}: serverEngine = {0}, clientEngine = {1}")
     public static Collection<Object[]> data() throws Exception {
         return Collections.singletonList(new Object[] {
           SslContextBuilder.forServer(CERT_FILE, KEY_FILE).sslProvider(SslProvider.JDK).build(),
@@ -82,20 +79,15 @@ public class SocketSslSessionReuseTest extends AbstractSocketTest {
         });
     }
 
-    private final SslContext serverCtx;
-    private final SslContext clientCtx;
-
-    public SocketSslSessionReuseTest(SslContext serverCtx, SslContext clientCtx) {
-        this.serverCtx = serverCtx;
-        this.clientCtx = clientCtx;
+    @ParameterizedTest(name = "{index}: serverEngine = {0}, clientEngine = {1}")
+    @MethodSource("data")
+    @Timeout(value = 30000, unit = TimeUnit.MILLISECONDS)
+    public void testSslSessionReuse(SslContext serverCtx, SslContext clientCtx, TestInfo testInfo) throws Throwable {
+        run(testInfo, (sb, cb) -> testSslSessionReuse(sb, cb, serverCtx, clientCtx));
     }
 
-    @Test(timeout = 30000)
-    public void testSslSessionReuse() throws Throwable {
-        run();
-    }
-
-    public void testSslSessionReuse(ServerBootstrap sb, Bootstrap cb) throws Throwable {
+    public void testSslSessionReuse(ServerBootstrap sb, Bootstrap cb,
+                                    SslContext serverCtx, SslContext clientCtx) throws Throwable {
         final ReadAndDiscardHandler sh = new ReadAndDiscardHandler(true, true);
         final ReadAndDiscardHandler ch = new ReadAndDiscardHandler(false, true);
         final String[] protocols = { "TLSv1", "TLSv1.1", "TLSv1.2" };
@@ -111,7 +103,7 @@ public class SocketSslSessionReuseTest extends AbstractSocketTest {
                 sch.pipeline().addLast(sh);
             }
         });
-        final Channel sc = sb.bind().sync().channel();
+        final Channel sc = sb.bind().get();
 
         cb.handler(new ChannelInitializer<SocketChannel>() {
             @Override
@@ -129,17 +121,17 @@ public class SocketSslSessionReuseTest extends AbstractSocketTest {
         try {
             SSLSessionContext clientSessionCtx = clientCtx.sessionContext();
             ByteBuf msg = Unpooled.wrappedBuffer(new byte[] { 0xa, 0xb, 0xc, 0xd }, 0, 4);
-            Channel cc = cb.connect(sc.localAddress()).sync().channel();
+            Channel cc = cb.connect(sc.localAddress()).get();
             cc.writeAndFlush(msg).sync();
             cc.closeFuture().sync();
             rethrowHandlerExceptions(sh, ch);
             Set<String> sessions = sessionIdSet(clientSessionCtx.getIds());
 
             msg = Unpooled.wrappedBuffer(new byte[] { 0xa, 0xb, 0xc, 0xd }, 0, 4);
-            cc = cb.connect(sc.localAddress()).sync().channel();
+            cc = cb.connect(sc.localAddress()).get();
             cc.writeAndFlush(msg).sync();
             cc.closeFuture().sync();
-            assertEquals("Expected no new sessions", sessions, sessionIdSet(clientSessionCtx.getIds()));
+            assertEquals(sessions, sessionIdSet(clientSessionCtx.getIds()), "Expected no new sessions");
             rethrowHandlerExceptions(sh, ch);
         } finally {
             sc.close().awaitUninterruptibly();
@@ -183,7 +175,7 @@ public class SocketSslSessionReuseTest extends AbstractSocketTest {
         }
 
         @Override
-        public void channelRead0(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        public void messageReceived(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
             byte[] actual = new byte[in.readableBytes()];
             in.readBytes(actual);
             ctx.close();

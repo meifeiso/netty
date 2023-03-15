@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -38,6 +38,8 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
 
     private static final Comparator<RunnableScheduledFutureNode<?>> SCHEDULED_FUTURE_TASK_COMPARATOR =
             Comparable::compareTo;
+    private static final RunnableScheduledFutureNode<?>[]
+            EMPTY_RUNNABLE_SCHEDULED_FUTURE_NODES = new RunnableScheduledFutureNode<?>[0];
 
     private PriorityQueue<RunnableScheduledFutureNode<?>> scheduledTaskQueue;
 
@@ -88,7 +90,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         }
 
         final RunnableScheduledFutureNode<?>[] scheduledTasks =
-                scheduledTaskQueue.toArray(new RunnableScheduledFutureNode<?>[0]);
+                scheduledTaskQueue.toArray(EMPTY_RUNNABLE_SCHEDULED_FUTURE_NODES);
 
         for (RunnableScheduledFutureNode<?> task: scheduledTasks) {
             task.cancel(false);
@@ -145,11 +147,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         if (scheduledTaskQueue == null) {
             return null;
         }
-        RunnableScheduledFutureNode<?> node = scheduledTaskQueue.peek();
-        if (node == null) {
-            return null;
-        }
-        return node;
+        return scheduledTaskQueue.peek();
     }
 
     /**
@@ -236,9 +234,9 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
     }
 
     private <V> void add0(RunnableScheduledFuture<V> task) {
-        final RunnableScheduledFutureNode node;
+        final RunnableScheduledFutureNode<V> node;
         if (task instanceof RunnableScheduledFutureNode) {
-            node = (RunnableScheduledFutureNode) task;
+            node = (RunnableScheduledFutureNode<V>) task;
         } else {
             node = new DefaultRunnableScheduledFutureNode<V>(task);
         }
@@ -270,7 +268,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
      */
     protected <V> RunnableScheduledFuture<V> newScheduledTaskFor(
             Callable<V> callable, long deadlineNanos, long period) {
-        return newRunnableScheduledFuture(this, this.newPromise(), callable, deadlineNanos, period);
+        return newRunnableScheduledFuture(this, newPromise(), callable, deadlineNanos, period);
     }
 
     interface RunnableScheduledFutureNode<V> extends PriorityQueueNode, RunnableScheduledFuture<V> { }
@@ -304,30 +302,15 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         }
 
         @Override
-        public RunnableScheduledFuture<V> addListener(
-                GenericFutureListener<? extends Future<? super V>> listener) {
+        public RunnableScheduledFuture<V> addListener(FutureListener<? super V> listener) {
             future.addListener(listener);
             return this;
         }
 
         @Override
-        public RunnableScheduledFuture<V> addListeners(
-                GenericFutureListener<? extends Future<? super V>>... listeners) {
-            future.addListeners(listeners);
-            return this;
-        }
-
-        @Override
-        public RunnableScheduledFuture<V> removeListener(
-                GenericFutureListener<? extends Future<? super V>> listener) {
-            future.removeListener(listener);
-            return this;
-        }
-
-        @Override
-        public RunnableScheduledFuture<V> removeListeners(
-                GenericFutureListener<? extends Future<? super V>>... listeners) {
-            future.removeListeners(listeners);
+        public <C> RunnableScheduledFuture<V> addListener(C context,
+                                                          FutureContextListener<? super C, ? super V> listener) {
+            future.addListener(context, listener);
             return this;
         }
 
@@ -413,6 +396,11 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         @Override
         public boolean isSuccess() {
             return future.isSuccess();
+        }
+
+        @Override
+        public boolean isFailed() {
+            return future.isFailed();
         }
 
         @Override

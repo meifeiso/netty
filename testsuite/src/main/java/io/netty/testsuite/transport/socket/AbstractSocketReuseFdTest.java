@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,21 +20,23 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.testsuite.transport.TestsuitePermutation;
 import io.netty.util.CharsetUtil;
+import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.Promise;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -45,9 +47,10 @@ public abstract class AbstractSocketReuseFdTest extends AbstractSocketTest {
     @Override
     protected abstract List<TestsuitePermutation.BootstrapComboFactory<ServerBootstrap, Bootstrap>> newFactories();
 
-    @Test(timeout = 60000)
-    public void testReuseFd() throws Throwable {
-        run();
+    @Test
+    @Timeout(value = 60000, unit = TimeUnit.MILLISECONDS)
+    public void testReuseFd(TestInfo testInfo) throws Throwable {
+        run(testInfo, this::testReuseFd);
     }
 
     public void testReuseFd(ServerBootstrap sb, Bootstrap cb) throws Throwable {
@@ -87,16 +90,13 @@ public abstract class AbstractSocketReuseFdTest extends AbstractSocketTest {
             }
         });
 
-        ChannelFutureListener listener = new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) {
-                if (!future.isSuccess()) {
-                    clientDonePromise.tryFailure(future.cause());
-                }
+        FutureListener<Channel> listener = future -> {
+            if (future.isFailed()) {
+                clientDonePromise.tryFailure(future.cause());
             }
         };
 
-        Channel sc = sb.bind().sync().channel();
+        Channel sc = sb.bind().get();
         for (int i = 0; i < numChannels; i++) {
             cb.connect(sc.localAddress()).addListener(listener);
         }
@@ -110,7 +110,7 @@ public abstract class AbstractSocketReuseFdTest extends AbstractSocketTest {
         }
     }
 
-    static class ReuseFdHandler extends ChannelInboundHandlerAdapter {
+    static class ReuseFdHandler implements ChannelHandler {
         private static final String EXPECTED_PAYLOAD = "payload";
 
         private final Promise<Void> donePromise;

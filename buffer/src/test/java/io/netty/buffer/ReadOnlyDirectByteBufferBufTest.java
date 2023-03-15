@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,18 +15,23 @@
  */
 package io.netty.buffer;
 
-import org.junit.Assert;
-import org.junit.Test;
+import io.netty.util.internal.PlatformDependent;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
 import java.nio.channels.FileChannel;
 import java.util.concurrent.ThreadLocalRandom;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class ReadOnlyDirectByteBufferBufTest {
 
@@ -38,16 +43,23 @@ public class ReadOnlyDirectByteBufferBufTest {
         return ByteBuffer.allocateDirect(size);
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
+    public void testIsContiguous() {
+        ByteBuf buf = buffer(allocate(4).asReadOnlyBuffer());
+        assertTrue(buf.isContiguous());
+        buf.release();
+    }
+
+    @Test
     public void testConstructWithWritable() {
-        buffer(allocate(1));
+        assertThrows(IllegalArgumentException.class, () -> buffer(allocate(1)));
     }
 
     @Test
     public void shouldIndicateNotWritable() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer()).clear();
         try {
-            Assert.assertFalse(buf.isWritable());
+            assertFalse(buf.isWritable());
         } finally {
             buf.release();
         }
@@ -57,7 +69,7 @@ public class ReadOnlyDirectByteBufferBufTest {
     public void shouldIndicateNotWritableAnyNumber() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer()).clear();
         try {
-            Assert.assertFalse(buf.isWritable(1));
+            assertFalse(buf.isWritable(1));
         } finally {
             buf.release();
         }
@@ -68,7 +80,7 @@ public class ReadOnlyDirectByteBufferBufTest {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer()).clear();
         try {
             int result = buf.ensureWritable(1, false);
-            Assert.assertEquals(1, result);
+            assertEquals(1, result);
         } finally {
             buf.release();
         }
@@ -79,99 +91,100 @@ public class ReadOnlyDirectByteBufferBufTest {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer()).clear();
         try {
             int result = buf.ensureWritable(1, true);
-            Assert.assertEquals(1, result);
+            assertEquals(1, result);
         } finally {
             buf.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void ensureWritableShouldThrow() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer()).clear();
         try {
-            buf.ensureWritable(1);
+            assertThrows(ReadOnlyBufferException.class, () -> buf.ensureWritable(1));
         } finally {
             buf.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void testSetByte() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer());
         try {
-            buf.setByte(0, 1);
+            assertThrows(ReadOnlyBufferException.class, () -> buf.setByte(0, 1));
         } finally {
             buf.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void testSetInt() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer());
         try {
-            buf.setInt(0, 1);
+            assertThrows(ReadOnlyBufferException.class, () -> buf.setInt(0, 1));
         } finally {
             buf.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void testSetShort() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer());
         try {
-            buf.setShort(0, 1);
+            assertThrows(ReadOnlyBufferException.class, () -> buf.setShort(0, 1));
         } finally {
             buf.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void testSetMedium() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer());
         try {
-            buf.setMedium(0, 1);
+            assertThrows(ReadOnlyBufferException.class, () -> buf.setMedium(0, 1));
         } finally {
             buf.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void testSetLong() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer());
         try {
-            buf.setLong(0, 1);
+            assertThrows(ReadOnlyBufferException.class, () -> buf.setLong(0, 1));
         } finally {
             buf.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void testSetBytesViaArray() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer());
         try {
-            buf.setBytes(0, "test".getBytes());
+            assertThrows(ReadOnlyBufferException.class, () -> buf.setBytes(0, "test".getBytes()));
         } finally {
             buf.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void testSetBytesViaBuffer() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer());
         ByteBuf copy = Unpooled.copyInt(1);
         try {
-            buf.setBytes(0, copy);
+            assertThrows(ReadOnlyBufferException.class, () -> buf.setBytes(0, copy));
         } finally {
             buf.release();
             copy.release();
         }
     }
 
-    @Test(expected = ReadOnlyBufferException.class)
+    @Test
     public void testSetBytesViaStream() throws IOException {
         ByteBuf buf = buffer(ByteBuffer.allocateDirect(8).asReadOnlyBuffer());
         try {
-            buf.setBytes(0, new ByteArrayInputStream("test".getBytes()), 2);
+            assertThrows(ReadOnlyBufferException.class,
+                () -> buf.setBytes(0, new ByteArrayInputStream("test".getBytes()), 2));
         } finally {
             buf.release();
         }
@@ -182,12 +195,12 @@ public class ReadOnlyDirectByteBufferBufTest {
         ByteBuf buf = buffer(
                 ((ByteBuffer) allocate(2).put(new byte[] { (byte) 1, (byte) 2 }).flip()).asReadOnlyBuffer());
 
-        Assert.assertEquals(1, buf.getByte(0));
-        Assert.assertEquals(2, buf.getByte(1));
+        assertEquals(1, buf.getByte(0));
+        assertEquals(2, buf.getByte(1));
 
-        Assert.assertEquals(1, buf.readByte());
-        Assert.assertEquals(2, buf.readByte());
-        Assert.assertFalse(buf.isReadable());
+        assertEquals(1, buf.readByte());
+        assertEquals(2, buf.readByte());
+        assertFalse(buf.isReadable());
 
         buf.release();
     }
@@ -196,12 +209,12 @@ public class ReadOnlyDirectByteBufferBufTest {
     public void testGetReadInt() {
         ByteBuf buf = buffer(((ByteBuffer) allocate(8).putInt(1).putInt(2).flip()).asReadOnlyBuffer());
 
-        Assert.assertEquals(1, buf.getInt(0));
-        Assert.assertEquals(2, buf.getInt(4));
+        assertEquals(1, buf.getInt(0));
+        assertEquals(2, buf.getInt(4));
 
-        Assert.assertEquals(1, buf.readInt());
-        Assert.assertEquals(2, buf.readInt());
-        Assert.assertFalse(buf.isReadable());
+        assertEquals(1, buf.readInt());
+        assertEquals(2, buf.readInt());
+        assertFalse(buf.isReadable());
 
         buf.release();
     }
@@ -211,12 +224,12 @@ public class ReadOnlyDirectByteBufferBufTest {
         ByteBuf buf = buffer(((ByteBuffer) allocate(8)
                 .putShort((short) 1).putShort((short) 2).flip()).asReadOnlyBuffer());
 
-        Assert.assertEquals(1, buf.getShort(0));
-        Assert.assertEquals(2, buf.getShort(2));
+        assertEquals(1, buf.getShort(0));
+        assertEquals(2, buf.getShort(2));
 
-        Assert.assertEquals(1, buf.readShort());
-        Assert.assertEquals(2, buf.readShort());
-        Assert.assertFalse(buf.isReadable());
+        assertEquals(1, buf.readShort());
+        assertEquals(2, buf.readShort());
+        assertFalse(buf.isReadable());
 
         buf.release();
     }
@@ -226,17 +239,17 @@ public class ReadOnlyDirectByteBufferBufTest {
         ByteBuf buf = buffer(((ByteBuffer) allocate(16)
                 .putLong(1).putLong(2).flip()).asReadOnlyBuffer());
 
-        Assert.assertEquals(1, buf.getLong(0));
-        Assert.assertEquals(2, buf.getLong(8));
+        assertEquals(1, buf.getLong(0));
+        assertEquals(2, buf.getLong(8));
 
-        Assert.assertEquals(1, buf.readLong());
-        Assert.assertEquals(2, buf.readLong());
-        Assert.assertFalse(buf.isReadable());
+        assertEquals(1, buf.readLong());
+        assertEquals(2, buf.readLong());
+        assertFalse(buf.isReadable());
 
         buf.release();
     }
 
-    @Test(expected = IndexOutOfBoundsException.class)
+    @Test
     public void testGetBytesByteBuffer() {
         byte[] bytes = {'a', 'b', 'c', 'd', 'e', 'f', 'g'};
         // Ensure destination buffer is bigger then what is in the ByteBuf.
@@ -244,7 +257,7 @@ public class ReadOnlyDirectByteBufferBufTest {
         ByteBuf buffer = buffer(((ByteBuffer) allocate(bytes.length)
                 .put(bytes).flip()).asReadOnlyBuffer());
         try {
-            buffer.getBytes(buffer.readerIndex(), nioBuffer);
+            assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(buffer.readerIndex(), nioBuffer));
         } finally {
             buffer.release();
         }
@@ -255,7 +268,7 @@ public class ReadOnlyDirectByteBufferBufTest {
         ByteBuf buf = buffer(((ByteBuffer) allocate(16).putLong(1).putLong(2).flip()).asReadOnlyBuffer());
         ByteBuf copy = buf.copy();
 
-        Assert.assertEquals(buf, copy);
+        assertEquals(buf, copy);
 
         buf.release();
         copy.release();
@@ -266,7 +279,7 @@ public class ReadOnlyDirectByteBufferBufTest {
         ByteBuf buf = buffer(((ByteBuffer) allocate(16).putLong(1).putLong(2).flip()).asReadOnlyBuffer());
         ByteBuf copy = buf.copy(1, 9);
 
-        Assert.assertEquals(buf.slice(1, 9), copy);
+        assertEquals(buf.slice(1, 9), copy);
 
         buf.release();
         copy.release();
@@ -279,7 +292,7 @@ public class ReadOnlyDirectByteBufferBufTest {
                 .putLong(1).flip().position(1)).asReadOnlyBuffer());
 
         ByteBuf slice = buf.slice();
-        Assert.assertEquals(buf, slice);
+        assertEquals(buf, slice);
 
         buf.release();
     }
@@ -288,31 +301,31 @@ public class ReadOnlyDirectByteBufferBufTest {
     public void testWrapBufferRoundTrip() {
         ByteBuf buf = buffer(((ByteBuffer) allocate(16).putInt(1).putInt(2).flip()).asReadOnlyBuffer());
 
-        Assert.assertEquals(1, buf.readInt());
+        assertEquals(1, buf.readInt());
 
         ByteBuffer nioBuffer = buf.nioBuffer();
 
         // Ensure this can be accessed without throwing a BufferUnderflowException
-        Assert.assertEquals(2, nioBuffer.getInt());
+        assertEquals(2, nioBuffer.getInt());
 
         buf.release();
     }
 
     @Test
     public void testWrapMemoryMapped() throws Exception {
-        File file = File.createTempFile("netty-test", "tmp");
+        File file = PlatformDependent.createTempFile("netty-test", "tmp", null);
         FileChannel output = null;
         FileChannel input = null;
         ByteBuf b1 = null;
         ByteBuf b2 = null;
 
         try {
-            output = new FileOutputStream(file).getChannel();
+            output = new RandomAccessFile(file, "rw").getChannel();
             byte[] bytes = new byte[1024];
             ThreadLocalRandom.current().nextBytes(bytes);
             output.write(ByteBuffer.wrap(bytes));
 
-            input = new FileInputStream(file).getChannel();
+            input = new RandomAccessFile(file, "r").getChannel();
             ByteBuffer m = input.map(FileChannel.MapMode.READ_ONLY, 0, input.size());
 
             b1 = buffer(m);
@@ -323,7 +336,7 @@ public class ReadOnlyDirectByteBufferBufTest {
 
             b2 = buffer(dup);
 
-            Assert.assertEquals(b2, b1.slice(2, 2));
+            assertEquals(b2, b1.slice(2, 2));
         } finally {
             if (b1 != null) {
                 b1.release();
@@ -345,10 +358,10 @@ public class ReadOnlyDirectByteBufferBufTest {
     public void testMemoryAddress() {
         ByteBuf buf = buffer(allocate(8).asReadOnlyBuffer());
         try {
-            Assert.assertFalse(buf.hasMemoryAddress());
+            assertFalse(buf.hasMemoryAddress());
             try {
                 buf.memoryAddress();
-                Assert.fail();
+                fail();
             } catch (UnsupportedOperationException expected) {
                 // expected
             }

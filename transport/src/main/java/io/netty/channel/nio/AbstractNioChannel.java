@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,12 +22,11 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.AbstractChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.ConnectTimeoutException;
 import io.netty.channel.EventLoop;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ReferenceCounted;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -58,7 +57,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      * The future of the current connection attempt.  If not null, subsequent
      * connection attempts will fail.
      */
-    private ChannelPromise connectPromise;
+    private Promise<Void> connectPromise;
     private ScheduledFuture<?> connectTimeoutFuture;
     private SocketAddress requestedRemoteAddress;
 
@@ -80,10 +79,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             try {
                 ch.close();
             } catch (IOException e2) {
-                if (logger.isWarnEnabled()) {
-                    logger.warn(
+                logger.warn(
                             "Failed to close a partially initialized socket.", e2);
-                }
             }
 
             throw new ChannelException("Failed to enter non-blocking mode.", e);
@@ -105,10 +102,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     }
 
     /**
-     * Return the current {@link SelectionKey}
+     * Return the current {@link SelectionKey} or {@code null} if the underlying channel was not registered with the
+     * {@link java.nio.channels.Selector} yet.
      */
     protected SelectionKey selectionKey() {
-        assert selectionKey != null;
         return selectionKey;
     }
 
@@ -128,7 +125,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     @Deprecated
     protected void setReadPending(final boolean readPending) {
         if (isRegistered()) {
-            EventLoop eventLoop = eventLoop();
+            EventLoop eventLoop = executor();
             if (eventLoop.inEventLoop()) {
                 setReadPending0(readPending);
             } else {
@@ -147,7 +144,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      */
     protected final void clearReadPending() {
         if (isRegistered()) {
-            EventLoop eventLoop = eventLoop();
+            EventLoop eventLoop = executor();
             if (eventLoop.inEventLoop()) {
                 clearReadPending0();
             } else {
@@ -202,7 +199,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // Check first if the key is still valid as it may be canceled as part of the deregistration
             // from the EventLoop
             // See https://github.com/netty/netty/issues/2104
-            if (!key.isValid()) {
+            if (key == null || !key.isValid()) {
                 return;
             }
             int interestOps = key.interestOps();
@@ -219,7 +216,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
         @Override
         public final void connect(
-                final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise promise) {
+                final SocketAddress remoteAddress, final SocketAddress localAddress, Promise<Void> promise) {
             if (!promise.setUncancellable() || !ensureOpen(promise)) {
                 return;
             }
@@ -240,23 +237,23 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                     // Schedule connect timeout.
                     int connectTimeoutMillis = config().getConnectTimeoutMillis();
                     if (connectTimeoutMillis > 0) {
-                        connectTimeoutFuture = eventLoop().schedule(() -> {
-                            ChannelPromise connectPromise = AbstractNioChannel.this.connectPromise;
-                            ConnectTimeoutException cause =
-                                    new ConnectTimeoutException("connection timed out: " + remoteAddress);
-                            if (connectPromise != null && connectPromise.tryFailure(cause)) {
-                                close(voidPromise());
+                        connectTimeoutFuture = executor().schedule(() -> {
+                            Promise<Void> connectPromise = AbstractNioChannel.this.connectPromise;
+                            if (connectPromise != null && !connectPromise.isDone()
+                                    && connectPromise.tryFailure(new ConnectTimeoutException(
+                                    "connection timed out: " + remoteAddress))) {
+                                close(newPromise());
                             }
                         }, connectTimeoutMillis, TimeUnit.MILLISECONDS);
                     }
 
-                    promise.addListener((ChannelFutureListener) future -> {
+                    promise.addListener(future -> {
                         if (future.isCancelled()) {
                             if (connectTimeoutFuture != null) {
                                 connectTimeoutFuture.cancel(false);
                             }
                             connectPromise = null;
-                            close(voidPromise());
+                            close(newPromise());
                         }
                     });
                 }
@@ -266,18 +263,18 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             }
         }
 
-        private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
+        private void fulfillConnectPromise(Promise<Void> promise, boolean wasActive) {
             if (promise == null) {
                 // Closed via cancellation and the promise has been notified already.
                 return;
             }
 
-            // Get the state as trySuccess() may trigger an ChannelFutureListener that will close the Channel.
+            // Get the state as trySuccess() may trigger an ChannelFutureListeners that will close the Channel.
             // We still need to ensure we call fireChannelActive() in this case.
             boolean active = isActive();
 
             // trySuccess() will return false if a user cancelled the connection attempt.
-            boolean promiseSet = promise.trySuccess();
+            boolean promiseSet = promise.trySuccess(null);
 
             // Regardless if the connection attempt was cancelled, channelActive() event should be triggered,
             // because what happened is what happened.
@@ -288,11 +285,11 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
             // If a user cancelled the connection attempt, close the channel, which is followed by channelInactive().
             if (!promiseSet) {
-                close(voidPromise());
+                close(newPromise());
             }
         }
 
-        private void fulfillConnectPromise(ChannelPromise promise, Throwable cause) {
+        private void fulfillConnectPromise(Promise<Void> promise, Throwable cause) {
             if (promise == null) {
                 // Closed via cancellation and the promise has been notified already.
                 return;
@@ -308,7 +305,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // Note this method is invoked by the event loop only if the connection attempt was
             // neither cancelled nor timed out.
 
-            assert eventLoop().inEventLoop();
+            assert executor().inEventLoop();
 
             try {
                 boolean wasActive = isActive();
@@ -344,18 +341,19 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
         private boolean isFlushPending() {
             SelectionKey selectionKey = selectionKey();
-            return selectionKey.isValid() && (selectionKey.interestOps() & SelectionKey.OP_WRITE) != 0;
+            return selectionKey != null && selectionKey.isValid()
+                    && (selectionKey.interestOps() & SelectionKey.OP_WRITE) != 0;
         }
     }
 
     @Override
     protected void doRegister() throws Exception {
-       eventLoop().unsafe().register(this);
+       executor().unsafe().register(this);
     }
 
     @Override
     protected void doDeregister() throws Exception {
-        eventLoop().unsafe().deregister(this);
+        executor().unsafe().deregister(this);
     }
 
     @Override
@@ -455,7 +453,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     @Override
     protected void doClose() throws Exception {
-        ChannelPromise promise = connectPromise;
+        Promise<Void> promise = connectPromise;
         if (promise != null) {
             // Use tryFailure() instead of setFailure() to avoid the race against cancel().
             promise.tryFailure(new ClosedChannelException());

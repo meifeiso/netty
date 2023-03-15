@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,6 +22,8 @@ import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.util.AttributeMap;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -45,7 +47,7 @@ import java.net.SocketAddress;
  * All I/O operations in Netty are asynchronous.  It means any I/O calls will
  * return immediately with no guarantee that the requested I/O operation has
  * been completed at the end of the call.  Instead, you will be returned with
- * a {@link ChannelFuture} instance which will notify you when the requested I/O
+ * a {@link Future} instance which will notify you when the requested I/O
  * operation has succeeded, failed, or canceled.
  *
  * <h3>Channels are hierarchical</h3>
@@ -59,7 +61,7 @@ import java.net.SocketAddress;
  * implementation where the {@link Channel} belongs to.  For example, you could
  * write a new {@link Channel} implementation that creates the sub-channels that
  * share one socket connection, as <a href="http://beepcore.org/">BEEP</a> and
- * <a href="http://en.wikipedia.org/wiki/Secure_Shell">SSH</a> do.
+ * <a href="https://en.wikipedia.org/wiki/Secure_Shell">SSH</a> do.
  *
  * <h3>Downcast to access transport-specific operations</h3>
  * <p>
@@ -70,7 +72,7 @@ import java.net.SocketAddress;
  *
  * <h3>Release resources</h3>
  * <p>
- * It is important to call {@link #close()} or {@link #close(ChannelPromise)} to release all
+ * It is important to call {@link #close()} to release all
  * resources once you are done with the {@link Channel}. This ensures all resources are
  * released in a proper way, i.e. filehandles.
  */
@@ -84,7 +86,7 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
     /**
      * Return the {@link EventLoop} this {@link Channel} was registered to.
      */
-    EventLoop eventLoop();
+    EventLoop executor();
 
     /**
      * Returns the parent of this channel.
@@ -147,10 +149,10 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
     SocketAddress remoteAddress();
 
     /**
-     * Returns the {@link ChannelFuture} which will be notified when this
+     * Returns the {@link Future} which will be notified when this
      * channel is closed.  This method always returns the same future instance.
      */
-    ChannelFuture closeFuture();
+    Future<Void> closeFuture();
 
     /**
      * Returns {@code true} if and only if the I/O thread will perform the
@@ -158,19 +160,32 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      * this method returns {@code false} are queued until the I/O thread is
      * ready to process the queued write requests.
      */
-    boolean isWritable();
+    default boolean isWritable() {
+        ChannelOutboundBuffer buf = unsafe().outboundBuffer();
+        return buf != null && buf.isWritable();
+    }
 
     /**
      * Get how many bytes can be written until {@link #isWritable()} returns {@code false}.
      * This quantity will always be non-negative. If {@link #isWritable()} is {@code false} then 0.
      */
-    long bytesBeforeUnwritable();
+    default long bytesBeforeUnwritable() {
+        ChannelOutboundBuffer buf = unsafe().outboundBuffer();
+        // isWritable() is currently assuming if there is no outboundBuffer then the channel is not writable.
+        // We should be consistent with that here.
+        return buf != null ? buf.bytesBeforeUnwritable() : 0;
+    }
 
     /**
      * Get how many bytes must be drained from underlying buffers until {@link #isWritable()} returns {@code true}.
      * This quantity will always be non-negative. If {@link #isWritable()} is {@code true} then 0.
      */
-    long bytesBeforeWritable();
+    default long bytesBeforeWritable() {
+        ChannelOutboundBuffer buf = unsafe().outboundBuffer();
+        // isWritable() is currently assuming if there is no outboundBuffer then the channel is not writable.
+        // We should be consistent with that here.
+        return buf != null ? buf.bytesBeforeWritable() : Long.MAX_VALUE;
+    }
 
     /**
      * Returns an <em>internal-use-only</em> object that provides unsafe operations.
@@ -185,13 +200,66 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
     /**
      * Return the assigned {@link ByteBufAllocator} which will be used to allocate {@link ByteBuf}s.
      */
-    ByteBufAllocator alloc();
+    default ByteBufAllocator alloc() {
+        return config().getAllocator();
+    }
 
     @Override
-    Channel read();
+    default Channel read() {
+        pipeline().read();
+        return this;
+    }
 
     @Override
-    Channel flush();
+    default Future<Void> bind(SocketAddress localAddress) {
+        return pipeline().bind(localAddress);
+    }
+
+    @Override
+    default Future<Void> connect(SocketAddress remoteAddress) {
+        return pipeline().connect(remoteAddress);
+    }
+
+    @Override
+    default Future<Void> connect(SocketAddress remoteAddress, SocketAddress localAddress) {
+        return pipeline().connect(remoteAddress, localAddress);
+    }
+
+    @Override
+    default Future<Void> disconnect() {
+        return pipeline().disconnect();
+    }
+
+    @Override
+    default Future<Void> close() {
+        return pipeline().close();
+    }
+
+    @Override
+    default Future<Void> register() {
+        return pipeline().register();
+    }
+
+    @Override
+    default Future<Void> deregister() {
+        return pipeline().deregister();
+    }
+
+    @Override
+    default Future<Void> write(Object msg) {
+        return pipeline().write(msg);
+    }
+
+    @Override
+    default Future<Void> writeAndFlush(Object msg) {
+        return pipeline().writeAndFlush(msg);
+    }
+
+    @Override
+    default Channel flush() {
+        pipeline().flush();
+        return this;
+    }
 
     /**
      * <em>Unsafe</em> operations that should <em>never</em> be called from user-code. These methods
@@ -201,9 +269,8 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      *   <li>{@link #localAddress()}</li>
      *   <li>{@link #remoteAddress()}</li>
      *   <li>{@link #closeForcibly()}</li>
-     *   <li>{@link #register(ChannelPromise)}</li>
-     *   <li>{@link #deregister(ChannelPromise)}</li>
-     *   <li>{@link #voidPromise()}</li>
+     *   <li>{@link #register(Promise)}</li>
+     *   <li>{@link #deregister(Promise)}</li>
      * </ul>
      */
     interface Unsafe {
@@ -227,37 +294,37 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
         SocketAddress remoteAddress();
 
         /**
-         * Register the {@link Channel} of the {@link ChannelPromise} and notify
-         * the {@link ChannelFuture} once the registration was complete.
+         * Register the {@link Channel} of the {@link Promise} and notify
+         * the {@link Future} once the registration was complete.
          */
-        void register(ChannelPromise promise);
+        void register(Promise<Void> promise);
 
         /**
-         * Bind the {@link SocketAddress} to the {@link Channel} of the {@link ChannelPromise} and notify
+         * Bind the {@link SocketAddress} to the {@link Channel} of the {@link Promise} and notify
          * it once its done.
          */
-        void bind(SocketAddress localAddress, ChannelPromise promise);
+        void bind(SocketAddress localAddress, Promise<Void> promise);
 
         /**
-         * Connect the {@link Channel} of the given {@link ChannelFuture} with the given remote {@link SocketAddress}.
+         * Connect the {@link Channel} of the given {@link Future} with the given remote {@link SocketAddress}.
          * If a specific local {@link SocketAddress} should be used it need to be given as argument. Otherwise just
          * pass {@code null} to it.
          *
-         * The {@link ChannelPromise} will get notified once the connect operation was complete.
+         * The {@link Promise} will get notified once the connect operation was complete.
          */
-        void connect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise);
+        void connect(SocketAddress remoteAddress, SocketAddress localAddress, Promise<Void> promise);
 
         /**
-         * Disconnect the {@link Channel} of the {@link ChannelFuture} and notify the {@link ChannelPromise} once the
+         * Disconnect the {@link Channel} of the {@link Future} and notify the {@link Promise} once the
          * operation was complete.
          */
-        void disconnect(ChannelPromise promise);
+        void disconnect(Promise<Void> promise);
 
         /**
-         * Close the {@link Channel} of the {@link ChannelPromise} and notify the {@link ChannelPromise} once the
+         * Close the {@link Channel} of the {@link Promise} and notify the {@link Promise} once the
          * operation was complete.
          */
-        void close(ChannelPromise promise);
+        void close(Promise<Void> promise);
 
         /**
          * Closes the {@link Channel} immediately without firing any events.  Probably only useful
@@ -266,13 +333,13 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
         void closeForcibly();
 
         /**
-         * Deregister the {@link Channel} of the {@link ChannelPromise} from {@link EventLoop} and notify the
-         * {@link ChannelPromise} once the operation was complete.
+         * Deregister the {@link Channel} of the {@link Promise} from {@link EventLoop} and notify the
+         * {@link Promise} once the operation was complete.
          */
-        void deregister(ChannelPromise promise);
+        void deregister(Promise<Void> promise);
 
         /**
-         * Schedules a read operation that fills the inbound buffer of the first {@link ChannelInboundHandler} in the
+         * Schedules a read operation that fills the inbound buffer of the first {@link ChannelHandler} in the
          * {@link ChannelPipeline}.  If there's already a pending read operation, this method does nothing.
          */
         void beginRead();
@@ -280,19 +347,12 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
         /**
          * Schedules a write operation.
          */
-        void write(Object msg, ChannelPromise promise);
+        void write(Object msg, Promise<Void> promise);
 
         /**
-         * Flush out all write operations scheduled via {@link #write(Object, ChannelPromise)}.
+         * Flush out all write operations scheduled via {@link #write(Object, Promise)}.
          */
         void flush();
-
-        /**
-         * Return a special ChannelPromise which can be reused and passed to the operations in {@link Unsafe}.
-         * It will never be notified of a success or error and so is only a placeholder for operations
-         * that take a {@link ChannelPromise} as argument but for which you not want to get notified.
-         */
-        ChannelPromise voidPromise();
 
         /**
          * Returns the {@link ChannelOutboundBuffer} of the {@link Channel} where the pending write requests are stored.

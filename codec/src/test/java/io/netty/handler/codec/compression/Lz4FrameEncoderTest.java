@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,8 +22,6 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
@@ -36,26 +34,29 @@ import io.netty.handler.codec.EncoderException;
 import net.jpountz.lz4.LZ4BlockInputStream;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.xxhash.XXHashFactory;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.Checksum;
 
 import static io.netty.handler.codec.compression.Lz4Constants.DEFAULT_SEED;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.core.Is.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 public class Lz4FrameEncoderTest extends AbstractEncoderTest {
@@ -75,15 +76,15 @@ public class Lz4FrameEncoderTest extends AbstractEncoderTest {
     @Mock
     private ByteBuf buffer;
 
-    @Before
+    @BeforeEach
     public void setup() {
         MockitoAnnotations.initMocks(this);
         when(ctx.alloc()).thenReturn(ByteBufAllocator.DEFAULT);
     }
 
     @Override
-    public void initChannel() {
-        channel = new EmbeddedChannel(new Lz4FrameEncoder());
+    protected EmbeddedChannel createChannel() {
+        return new EmbeddedChannel(new Lz4FrameEncoder());
     }
 
     @Override
@@ -139,11 +140,11 @@ public class Lz4FrameEncoderTest extends AbstractEncoderTest {
         try {
             Lz4FrameEncoder encoder = newEncoder(blockSize, Lz4FrameEncoder.DEFAULT_MAX_ENCODE_SIZE);
             out = encoder.allocateBuffer(ctx, in, preferDirect);
-            Assert.assertNotNull(out);
+            assertNotNull(out);
             if (NONALLOCATABLE_SIZE == bufSize) {
-                Assert.assertFalse(out.isWritable());
+                assertFalse(out.isWritable());
             } else {
-                Assert.assertTrue(out.writableBytes() > 0);
+                assertTrue(out.writableBytes() > 0);
                 if (!preferDirect) {
                     // Only check if preferDirect is not true as if a direct buffer is returned or not depends on
                     // if sun.misc.Unsafe is present.
@@ -158,7 +159,7 @@ public class Lz4FrameEncoderTest extends AbstractEncoderTest {
         }
     }
 
-    @Test (expected = EncoderException.class)
+    @Test
     public void testAllocateDirectBufferExceedMaxEncodeSize() {
         final int maxEncodeSize = 1024;
         Lz4FrameEncoder encoder = newEncoder(Lz4Constants.DEFAULT_BLOCK_SIZE, maxEncodeSize);
@@ -166,7 +167,7 @@ public class Lz4FrameEncoderTest extends AbstractEncoderTest {
         ByteBuf buf = ByteBufAllocator.DEFAULT.buffer(inputBufferSize, inputBufferSize);
         try {
             buf.writerIndex(inputBufferSize);
-            encoder.allocateBuffer(ctx, buf, false);
+            assertThrows(EncoderException.class, () -> encoder.allocateBuffer(ctx, buf, false));
         } finally {
             buf.release();
         }
@@ -187,13 +188,13 @@ public class Lz4FrameEncoderTest extends AbstractEncoderTest {
      * {@link Lz4FrameEncoder#allocateBuffer(ChannelHandlerContext, ByteBuf, boolean)}, but this is safest way
      * of testing the overflow conditions as allocating the huge buffers fails in many CI environments.
      */
-    @Test (expected = EncoderException.class)
+    @Test
     public void testAllocateOnHeapBufferOverflowsOutputSize() {
         final int maxEncodeSize = Integer.MAX_VALUE;
         Lz4FrameEncoder encoder = newEncoder(Lz4Constants.DEFAULT_BLOCK_SIZE, maxEncodeSize);
         when(buffer.readableBytes()).thenReturn(maxEncodeSize);
         buffer.writerIndex(maxEncodeSize);
-        encoder.allocateBuffer(ctx, buffer, false);
+        assertThrows(EncoderException.class, () -> encoder.allocateBuffer(ctx, buffer, false));
     }
 
     @Test
@@ -203,14 +204,14 @@ public class Lz4FrameEncoderTest extends AbstractEncoderTest {
         int size = 27;
         ByteBuf buf = ByteBufAllocator.DEFAULT.buffer(size, size);
         buf.writerIndex(size);
-        Assert.assertEquals(0, encoder.getBackingBuffer().readableBytes());
+        assertEquals(0, encoder.getBackingBuffer().readableBytes());
         channel.write(buf);
-        Assert.assertTrue(channel.outboundMessages().isEmpty());
-        Assert.assertEquals(size, encoder.getBackingBuffer().readableBytes());
+        assertTrue(channel.outboundMessages().isEmpty());
+        assertEquals(size, encoder.getBackingBuffer().readableBytes());
         channel.flush();
-        Assert.assertTrue(channel.finish());
-        Assert.assertTrue(channel.releaseOutbound());
-        Assert.assertFalse(channel.releaseInbound());
+        assertTrue(channel.finish());
+        assertTrue(channel.releaseOutbound());
+        assertFalse(channel.releaseInbound());
     }
 
     @Test
@@ -222,25 +223,26 @@ public class Lz4FrameEncoderTest extends AbstractEncoderTest {
         int size = blockSize - 1;
         ByteBuf buf = ByteBufAllocator.DEFAULT.buffer(size, size);
         buf.writerIndex(size);
-        Assert.assertEquals(0, encoder.getBackingBuffer().readableBytes());
+        assertEquals(0, encoder.getBackingBuffer().readableBytes());
         channel.write(buf);
-        Assert.assertEquals(size, encoder.getBackingBuffer().readableBytes());
+        assertEquals(size, encoder.getBackingBuffer().readableBytes());
 
         int nextSize = size - 1;
         buf = ByteBufAllocator.DEFAULT.buffer(nextSize, nextSize);
         buf.writerIndex(nextSize);
         channel.write(buf);
-        Assert.assertEquals(size + nextSize - blockSize, encoder.getBackingBuffer().readableBytes());
+        assertEquals(size + nextSize - blockSize, encoder.getBackingBuffer().readableBytes());
 
         channel.flush();
-        Assert.assertEquals(0, encoder.getBackingBuffer().readableBytes());
-        Assert.assertTrue(channel.finish());
-        Assert.assertTrue(channel.releaseOutbound());
-        Assert.assertFalse(channel.releaseInbound());
+        assertEquals(0, encoder.getBackingBuffer().readableBytes());
+        assertTrue(channel.finish());
+        assertTrue(channel.releaseOutbound());
+        assertFalse(channel.releaseInbound());
     }
 
-    @Test(timeout = 3000)
-    public void writingAfterClosedChannelDoesNotNPE() throws InterruptedException {
+    @Test
+    @Timeout(value = 3000, unit = TimeUnit.MILLISECONDS)
+    public void writingAfterClosedChannelDoesNotNPE() throws Exception {
         EventLoopGroup group = new MultithreadEventLoopGroup(2, NioHandler.newFactory());
         Channel serverChannel = null;
         Channel clientChannel = null;
@@ -266,22 +268,22 @@ public class Lz4FrameEncoderTest extends AbstractEncoderTest {
                 }
             });
 
-            serverChannel = sb.bind(new InetSocketAddress(0)).syncUninterruptibly().channel();
-            clientChannel = bs.connect(serverChannel.localAddress()).syncUninterruptibly().channel();
+            serverChannel = sb.bind(new InetSocketAddress(0)).get();
+            clientChannel = bs.connect(serverChannel.localAddress()).get();
 
             final Channel finalClientChannel = clientChannel;
-            clientChannel.eventLoop().execute(() -> {
+            clientChannel.executor().execute(() -> {
                 finalClientChannel.close();
                 final int size = 27;
                 ByteBuf buf = ByteBufAllocator.DEFAULT.buffer(size, size);
                 finalClientChannel.writeAndFlush(buf.writerIndex(buf.writerIndex() + size))
-                        .addListener((ChannelFutureListener) future -> {
-                            try {
-                                writeFailCauseRef.set(future.cause());
-                            } finally {
-                                latch.countDown();
-                            }
-                        });
+                                  .addListener(future -> {
+                                      try {
+                                          writeFailCauseRef.set(future.cause());
+                                      } finally {
+                                          latch.countDown();
+                                      }
+                                  });
             });
             latch.await();
             Throwable writeFailCause = writeFailCauseRef.get();

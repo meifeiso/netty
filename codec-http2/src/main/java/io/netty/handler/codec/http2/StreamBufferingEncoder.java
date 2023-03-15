@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -17,10 +17,10 @@ package io.netty.handler.codec.http2;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.UnstableApi;
 
 import java.util.ArrayDeque;
@@ -69,33 +69,45 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
         }
     }
 
+    private static final class GoAwayDetail {
+        private final int lastStreamId;
+        private final long errorCode;
+        private final byte[] debugData;
+
+        GoAwayDetail(int lastStreamId, long errorCode, byte[] debugData) {
+            this.lastStreamId = lastStreamId;
+            this.errorCode = errorCode;
+            this.debugData = debugData.clone();
+        }
+    }
+
     /**
      * Thrown by {@link StreamBufferingEncoder} if buffered streams are terminated due to
      * receipt of a {@code GOAWAY}.
      */
     public static final class Http2GoAwayException extends Http2Exception {
         private static final long serialVersionUID = 1326785622777291198L;
-        private final int lastStreamId;
-        private final long errorCode;
-        private final byte[] debugData;
+        private final GoAwayDetail goAwayDetail;
 
         public Http2GoAwayException(int lastStreamId, long errorCode, byte[] debugData) {
+            this(new GoAwayDetail(lastStreamId, errorCode, debugData));
+        }
+
+        Http2GoAwayException(GoAwayDetail goAwayDetail) {
             super(Http2Error.STREAM_CLOSED);
-            this.lastStreamId = lastStreamId;
-            this.errorCode = errorCode;
-            this.debugData = debugData;
+            this.goAwayDetail = goAwayDetail;
         }
 
         public int lastStreamId() {
-            return lastStreamId;
+            return goAwayDetail.lastStreamId;
         }
 
         public long errorCode() {
-            return errorCode;
+            return goAwayDetail.errorCode;
         }
 
         public byte[] debugData() {
-            return debugData;
+            return goAwayDetail.debugData.clone();
         }
     }
 
@@ -106,6 +118,7 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
     private final TreeMap<Integer, PendingStream> pendingStreams = new TreeMap<>();
     private int maxConcurrentStreams;
     private boolean closed;
+    private GoAwayDetail goAwayDetail;
 
     public StreamBufferingEncoder(Http2ConnectionEncoder delegate) {
         this(delegate, SMALLEST_MAX_CONCURRENT_STREAMS);
@@ -113,12 +126,16 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
 
     public StreamBufferingEncoder(Http2ConnectionEncoder delegate, int initialMaxConcurrentStreams) {
         super(delegate);
-        this.maxConcurrentStreams = initialMaxConcurrentStreams;
+        maxConcurrentStreams = initialMaxConcurrentStreams;
         connection().addListener(new Http2ConnectionAdapter() {
 
             @Override
             public void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
-                cancelGoAwayStreams(lastStreamId, errorCode, debugData);
+                goAwayDetail = new GoAwayDetail(
+                    // Using getBytes(..., false) is safe here as GoAwayDetail(...) will clone the byte[].
+                    lastStreamId, errorCode,
+                    ByteBufUtil.getBytes(debugData, debugData.readerIndex(), debugData.readableBytes(), false));
+                cancelGoAwayStreams(goAwayDetail);
             }
 
             @Override
@@ -136,42 +153,42 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
     }
 
     @Override
-    public ChannelFuture writeHeaders(ChannelHandlerContext ctx, int streamId, Http2Headers headers,
-                                      int padding, boolean endStream, ChannelPromise promise) {
+    public Future<Void> writeHeaders(ChannelHandlerContext ctx, int streamId, Http2Headers headers,
+                                     int padding, boolean endStream) {
         return writeHeaders(ctx, streamId, headers, 0, Http2CodecUtil.DEFAULT_PRIORITY_WEIGHT,
-                false, padding, endStream, promise);
+                false, padding, endStream);
     }
 
     @Override
-    public ChannelFuture writeHeaders(ChannelHandlerContext ctx, int streamId, Http2Headers headers,
-                                      int streamDependency, short weight, boolean exclusive,
-                                      int padding, boolean endOfStream, ChannelPromise promise) {
+    public Future<Void> writeHeaders(ChannelHandlerContext ctx, int streamId, Http2Headers headers,
+                                     int streamDependency, short weight, boolean exclusive,
+                                     int padding, boolean endOfStream) {
         if (closed) {
-            return promise.setFailure(new Http2ChannelClosedException());
+            return ctx.newFailedFuture(new Http2ChannelClosedException());
         }
-        if (isExistingStream(streamId) || connection().goAwayReceived()) {
+        if (isExistingStream(streamId) || canCreateStream()) {
             return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
-                    exclusive, padding, endOfStream, promise);
+                    exclusive, padding, endOfStream);
         }
-        if (canCreateStream()) {
-            return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
-                    exclusive, padding, endOfStream, promise);
+        if (goAwayDetail != null) {
+            return ctx.newFailedFuture(new Http2GoAwayException(goAwayDetail));
         }
         PendingStream pendingStream = pendingStreams.get(streamId);
         if (pendingStream == null) {
             pendingStream = new PendingStream(ctx, streamId);
             pendingStreams.put(streamId, pendingStream);
         }
+        Promise<Void> promise = ctx.newPromise();
+
         pendingStream.frames.add(new HeadersFrame(headers, streamDependency, weight, exclusive,
                 padding, endOfStream, promise));
         return promise;
     }
 
     @Override
-    public ChannelFuture writeRstStream(ChannelHandlerContext ctx, int streamId, long errorCode,
-                                        ChannelPromise promise) {
+    public Future<Void> writeRstStream(ChannelHandlerContext ctx, int streamId, long errorCode) {
         if (isExistingStream(streamId)) {
-            return super.writeRstStream(ctx, streamId, errorCode, promise);
+            return super.writeRstStream(ctx, streamId, errorCode);
         }
         // Since the delegate doesn't know about any buffered streams we have to handle cancellation
         // of the promises and releasing of the ByteBufs here.
@@ -182,27 +199,27 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
             // about the stream anymore and thus there is not point in failing the promises and invoking
             // error handling routines.
             stream.close(null);
-            promise.setSuccess();
+            return ctx.newSucceededFuture();
         } else {
-            promise.setFailure(connectionError(PROTOCOL_ERROR, "Stream does not exist %d", streamId));
+            return ctx.newFailedFuture(connectionError(PROTOCOL_ERROR, "Stream does not exist %d", streamId));
         }
-        return promise;
     }
 
     @Override
-    public ChannelFuture writeData(ChannelHandlerContext ctx, int streamId, ByteBuf data,
-                                   int padding, boolean endOfStream, ChannelPromise promise) {
+    public Future<Void> writeData(ChannelHandlerContext ctx, int streamId, ByteBuf data,
+                                  int padding, boolean endOfStream) {
         if (isExistingStream(streamId)) {
-            return super.writeData(ctx, streamId, data, padding, endOfStream, promise);
+            return super.writeData(ctx, streamId, data, padding, endOfStream);
         }
         PendingStream pendingStream = pendingStreams.get(streamId);
         if (pendingStream != null) {
+            Promise<Void> promise = ctx.newPromise();
             pendingStream.frames.add(new DataFrame(data, padding, endOfStream, promise));
+            return promise;
         } else {
             ReferenceCountUtil.safeRelease(data);
-            promise.setFailure(connectionError(PROTOCOL_ERROR, "Stream does not exist %d", streamId));
+            return ctx.newFailedFuture(connectionError(PROTOCOL_ERROR, "Stream does not exist %d", streamId));
         }
-        return promise;
     }
 
     @Override
@@ -248,12 +265,12 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
         }
     }
 
-    private void cancelGoAwayStreams(int lastStreamId, long errorCode, ByteBuf debugData) {
+    private void cancelGoAwayStreams(GoAwayDetail goAwayDetail) {
         Iterator<PendingStream> iter = pendingStreams.values().iterator();
-        Exception e = new Http2GoAwayException(lastStreamId, errorCode, ByteBufUtil.getBytes(debugData));
+        Exception e = new Http2GoAwayException(goAwayDetail);
         while (iter.hasNext()) {
             PendingStream stream = iter.next();
-            if (stream.streamId > lastStreamId) {
+            if (stream.streamId > goAwayDetail.lastStreamId) {
                 iter.remove();
                 stream.close(e);
             }
@@ -295,9 +312,9 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
     }
 
     private abstract static class Frame {
-        final ChannelPromise promise;
+        final Promise<Void> promise;
 
-        Frame(ChannelPromise promise) {
+        Frame(Promise<Void> promise) {
             this.promise = promise;
         }
 
@@ -306,7 +323,7 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
          */
         void release(Throwable t) {
             if (t == null) {
-                promise.setSuccess();
+                promise.setSuccess(null);
             } else {
                 promise.setFailure(t);
             }
@@ -324,7 +341,7 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
         final boolean endOfStream;
 
         HeadersFrame(Http2Headers headers, int streamDependency, short weight, boolean exclusive,
-                     int padding, boolean endOfStream, ChannelPromise promise) {
+                     int padding, boolean endOfStream, Promise<Void> promise) {
             super(promise);
             this.headers = headers;
             this.streamDependency = streamDependency;
@@ -336,7 +353,8 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
 
         @Override
         void send(ChannelHandlerContext ctx, int streamId) {
-            writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive, padding, endOfStream, promise);
+            writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive, padding, endOfStream)
+                    .cascadeTo(promise);
         }
     }
 
@@ -345,7 +363,7 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
         final int padding;
         final boolean endOfStream;
 
-        DataFrame(ByteBuf data, int padding, boolean endOfStream, ChannelPromise promise) {
+        DataFrame(ByteBuf data, int padding, boolean endOfStream, Promise<Void> promise) {
             super(promise);
             this.data = data;
             this.padding = padding;
@@ -360,7 +378,7 @@ public class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
 
         @Override
         void send(ChannelHandlerContext ctx, int streamId) {
-            writeData(ctx, streamId, data, padding, endOfStream, promise);
+            writeData(ctx, streamId, data, padding, endOfStream).cascadeTo(promise);
         }
     }
 }

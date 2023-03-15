@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,14 +17,13 @@ package io.netty.handler.codec.http;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.MessageAggregator;
 import io.netty.handler.codec.TooLongFrameException;
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -250,26 +249,39 @@ public class HttpObjectAggregator
             // If keep-alive is off and 'Expect: 100-continue' is missing, no need to leave the connection open.
             if (oversized instanceof FullHttpMessage ||
                 !HttpUtil.is100ContinueExpected(oversized) && !HttpUtil.isKeepAlive(oversized)) {
-                ChannelFuture future = ctx.writeAndFlush(TOO_LARGE_CLOSE.retainedDuplicate());
-                future.addListener((ChannelFutureListener) future1 -> {
-                    if (!future1.isSuccess()) {
+                Future<Void> future = ctx.writeAndFlush(TOO_LARGE_CLOSE.retainedDuplicate());
+                future.addListener(future1 -> {
+                    if (future1.isFailed()) {
                         logger.debug("Failed to send a 413 Request Entity Too Large.", future1.cause());
                     }
                     ctx.close();
                 });
             } else {
-                ctx.writeAndFlush(TOO_LARGE.retainedDuplicate()).addListener((ChannelFutureListener) future -> {
-                    if (!future.isSuccess()) {
+                ctx.writeAndFlush(TOO_LARGE.retainedDuplicate()).addListener(future -> {
+                    if (future.isFailed()) {
                         logger.debug("Failed to send a 413 Request Entity Too Large.", future.cause());
                         ctx.close();
                     }
                 });
             }
         } else if (oversized instanceof HttpResponse) {
-            ctx.close();
-            throw new TooLongFrameException("Response entity too large: " + oversized);
+            throw new ResponseTooLargeException("Response entity too large: " + oversized);
         } else {
             throw new IllegalStateException();
+        }
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        super.exceptionCaught(ctx, cause);
+        if (cause instanceof ResponseTooLargeException) {
+            ctx.close();
+        }
+    }
+
+    private static final class ResponseTooLargeException extends TooLongFrameException {
+        ResponseTooLargeException(String message) {
+            super(message);
         }
     }
 

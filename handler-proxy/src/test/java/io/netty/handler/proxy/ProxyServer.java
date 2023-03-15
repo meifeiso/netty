@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,11 +21,9 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoop;
@@ -37,6 +35,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.CharsetUtil;
 import io.netty.util.NetUtil;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -106,7 +105,7 @@ abstract class ProxyServer {
             }
         });
 
-        ch = (ServerSocketChannel) b.bind(NetUtil.LOCALHOST, 0).syncUninterruptibly().channel();
+        ch = (ServerSocketChannel) b.bind(NetUtil.LOCALHOST, 0).syncUninterruptibly().getNow();
     }
 
     public final InetSocketAddress address() {
@@ -158,7 +157,7 @@ abstract class ProxyServer {
         private Channel backend;
 
         @Override
-        protected final void channelRead0(final ChannelHandlerContext ctx, Object msg) throws Exception {
+        protected final void messageReceived(final ChannelHandlerContext ctx, Object msg) throws Exception {
             if (finished) {
                 received.add(ReferenceCountUtil.retain(msg));
                 flush();
@@ -168,13 +167,13 @@ abstract class ProxyServer {
             boolean finished = handleProxyProtocol(ctx, msg);
             if (finished) {
                 this.finished = true;
-                ChannelFuture f = connectToDestination(ctx.channel().eventLoop(), new BackendHandler(ctx));
-                f.addListener((ChannelFutureListener) future -> {
-                    if (!future.isSuccess()) {
+                Future<Channel> f = connectToDestination(ctx.channel().executor(), new BackendHandler(ctx));
+                f.addListener(future -> {
+                    if (future.isFailed()) {
                         recordException(future.cause());
                         ctx.close();
                     } else {
-                        backend = future.channel();
+                        backend = future.getNow();
                         flush();
                     }
                 });
@@ -203,7 +202,7 @@ abstract class ProxyServer {
 
         protected abstract SocketAddress intermediaryDestination();
 
-        private ChannelFuture connectToDestination(EventLoop loop, ChannelHandler handler) {
+        private Future<Channel> connectToDestination(EventLoop loop, ChannelHandler handler) {
             Bootstrap b = new Bootstrap();
             b.channel(NioSocketChannel.class);
             b.group(loop);
@@ -229,7 +228,7 @@ abstract class ProxyServer {
             ctx.close();
         }
 
-        private final class BackendHandler implements ChannelInboundHandler {
+        private final class BackendHandler implements ChannelHandler {
 
             private final ChannelHandlerContext frontend;
 
@@ -265,7 +264,7 @@ abstract class ProxyServer {
         private boolean finished;
 
         @Override
-        protected final void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+        protected final void messageReceived(ChannelHandlerContext ctx, Object msg) throws Exception {
             if (finished) {
                 String str = ((ByteBuf) msg).toString(CharsetUtil.US_ASCII);
                 if ("A\n".equals(str)) {
@@ -274,7 +273,7 @@ abstract class ProxyServer {
                     ctx.write(Unpooled.copiedBuffer("2\n", CharsetUtil.US_ASCII));
                 } else if ("C\n".equals(str)) {
                     ctx.write(Unpooled.copiedBuffer("3\n", CharsetUtil.US_ASCII))
-                       .addListener(ChannelFutureListener.CLOSE);
+                       .addListener(ctx.channel(), ChannelFutureListeners.CLOSE);
                 } else {
                     throw new IllegalStateException("unexpected message: " + str);
                 }

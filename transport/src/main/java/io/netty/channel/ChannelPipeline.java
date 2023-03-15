@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -29,7 +29,7 @@ import java.util.NoSuchElementException;
 /**
  * A list of {@link ChannelHandler}s which handles or intercepts inbound events and outbound operations of a
  * {@link Channel}. {@link ChannelPipeline} implements an advanced form of the
- * <a href="http://www.oracle.com/technetwork/java/interceptingfilter-142169.html">Intercepting Filter</a> pattern
+ * <a href="https://www.oracle.com/technetwork/java/interceptingfilter-142169.html">Intercepting Filter</a> pattern
  * to give a user full control over how an event is handled and how the {@link ChannelHandler}s in a pipeline
  * interact with each other.
  *
@@ -113,11 +113,11 @@ import java.util.NoSuchElementException;
  * When an event goes outbound, the order is 5, 4, 3, 2, 1.  On top of this principle, {@link ChannelPipeline} skips
  * the evaluation of certain handlers to shorten the stack depth:
  * <ul>
- * <li>3 and 4 don't implement {@link ChannelInboundHandler}, and therefore the actual evaluation order of an inbound
- *     event will be: 1, 2, and 5.</li>
- * <li>1 and 2 don't implement {@link ChannelOutboundHandler}, and therefore the actual evaluation order of a
- *     outbound event will be: 5, 4, and 3.</li>
- * <li>If 5 implements both {@link ChannelInboundHandler} and {@link ChannelOutboundHandler}, the evaluation order of
+ * <li>3 and 4 don't implement inbound handling methods of {@link ChannelHandler},
+ *     and therefore the actual evaluation order of an inbound  event will be: 1, 2, and 5.</li>
+ * <li>1 and 2 don't implement outbound handling methods of {@link ChannelHandler}, and therefore the actual evaluation
+ *     order of an outbound event will be: 5, 4, and 3.</li>
+ * <li>If 5 implements both inbound and outbound handling methods of {@link ChannelHandler}, the evaluation order of
  *     an inbound and a outbound event could be 125 and 543 respectively.</li>
  * </ul>
  *
@@ -141,14 +141,14 @@ import java.util.NoSuchElementException;
  * </li>
  * <li>Outbound event propagation methods:
  *     <ul>
- *     <li>{@link ChannelHandlerContext#bind(SocketAddress, ChannelPromise)}</li>
- *     <li>{@link ChannelHandlerContext#connect(SocketAddress, SocketAddress, ChannelPromise)}</li>
- *     <li>{@link ChannelHandlerContext#write(Object, ChannelPromise)}</li>
+ *     <li>{@link ChannelHandlerContext#bind(SocketAddress)}</li>
+ *     <li>{@link ChannelHandlerContext#connect(SocketAddress, SocketAddress)}</li>
+ *     <li>{@link ChannelHandlerContext#write(Object)}</li>
  *     <li>{@link ChannelHandlerContext#flush()}</li>
  *     <li>{@link ChannelHandlerContext#read()}</li>
- *     <li>{@link ChannelHandlerContext#disconnect(ChannelPromise)}</li>
- *     <li>{@link ChannelHandlerContext#close(ChannelPromise)}</li>
- *     <li>{@link ChannelHandlerContext#deregister(ChannelPromise)}</li>
+ *     <li>{@link ChannelHandlerContext#disconnect()}</li>
+ *     <li>{@link ChannelHandlerContext#close()}</li>
+ *     <li>{@link ChannelHandlerContext#deregister()}</li>
  *     </ul>
  * </li>
  * </ul>
@@ -156,7 +156,7 @@ import java.util.NoSuchElementException;
  * and the following example shows how the event propagation is usually done:
  *
  * <pre>
- * public class MyInboundHandler implements {@link ChannelInboundHandler} {
+ * public class MyInboundHandler implements {@link ChannelHandler} {
  *     {@code @Override}
  *     public void channelActive({@link ChannelHandlerContext} ctx) {
  *         System.out.println("Connected!");
@@ -164,11 +164,11 @@ import java.util.NoSuchElementException;
  *     }
  * }
  *
- * public class MyOutboundHandler implements {@link ChannelOutboundHandler} {
+ * public class MyOutboundHandler implements {@link ChannelHandler} {
  *     {@code @Override}
- *     public void close({@link ChannelHandlerContext} ctx, {@link ChannelPromise} promise) {
+ *     public Future&ltVoid&gt close({@link ChannelHandlerContext} ctx) {
  *         System.out.println("Closing ..");
- *         ctx.close(promise);
+ *         return ctx.close();
  *     }
  * }
  * </pre>
@@ -271,7 +271,7 @@ public interface ChannelPipeline
     ChannelPipeline addAfter(String baseName, String name, ChannelHandler handler);
 
     /**
-     * Inserts {@link ChannelHandler}s at the first position of this pipeline.
+     * Inserts {@link ChannelHandler}s at the first position of this pipeline. {@code null} handlers will be skipped.
      *
      * @param handlers  the handlers to insert first
      *
@@ -279,7 +279,7 @@ public interface ChannelPipeline
     ChannelPipeline addFirst(ChannelHandler... handlers);
 
     /**
-     * Inserts {@link ChannelHandler}s at the last position of this pipeline.
+     * Inserts {@link ChannelHandler}s at the last position of this pipeline. {@code null} handlers will be skipped.
      *
      * @param handlers  the handlers to insert last
      *
@@ -438,6 +438,14 @@ public interface ChannelPipeline
     ChannelHandlerContext lastContext();
 
     /**
+     * Returns {@code true} if this {@link ChannelPipeline} is empty, which means no {@link ChannelHandler} is
+     * present.
+     */
+    default boolean isEmpty() {
+        return lastContext() == null;
+    }
+
+    /**
      * Returns the {@link ChannelHandler} with the specified name in this
      * pipeline.
      *
@@ -529,9 +537,4 @@ public interface ChannelPipeline
 
     @Override
     ChannelPipeline flush();
-
-    /**
-     * Returns the {@link EventExecutor} which is used by all {@link ChannelHandler}s in the pipeline.
-     */
-    EventExecutor executor();
 }

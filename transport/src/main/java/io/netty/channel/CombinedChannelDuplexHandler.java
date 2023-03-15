@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,14 +15,16 @@
  */
 package io.netty.channel;
 
-import static java.util.Objects.requireNonNull;
-
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 
 import java.net.SocketAddress;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  *  Combines the inbound handling of one {@link ChannelHandler} with the outbound handling of
@@ -103,7 +105,7 @@ public class CombinedChannelDuplexHandler<I extends ChannelHandler, O extends Ch
     }
 
     /**
-     * Removes the {@link ChannelInboundHandler} that was combined in this {@link CombinedChannelDuplexHandler}.
+     * Removes the inbound {@link ChannelHandler} that was combined in this {@link CombinedChannelDuplexHandler}.
      */
     public final void removeInboundHandler() {
         checkAdded();
@@ -111,7 +113,7 @@ public class CombinedChannelDuplexHandler<I extends ChannelHandler, O extends Ch
     }
 
     /**
-     * Removes the {@link ChannelOutboundHandler} that was combined in this {@link CombinedChannelDuplexHandler}.
+     * Removes the outbound {@link ChannelHandler} that was combined in this {@link CombinedChannelDuplexHandler}.
      */
     public final void removeOutboundHandler() {
         checkAdded();
@@ -241,72 +243,71 @@ public class CombinedChannelDuplexHandler<I extends ChannelHandler, O extends Ch
     }
 
     @Override
-    public void bind(
+    public Future<Void> bind(
             ChannelHandlerContext ctx,
-            SocketAddress localAddress, ChannelPromise promise) throws Exception {
+            SocketAddress localAddress) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
-            outboundHandler.bind(outboundCtx, localAddress, promise);
+            return outboundHandler.bind(outboundCtx, localAddress);
         } else {
-            outboundCtx.bind(localAddress, promise);
+            return outboundCtx.bind(localAddress);
         }
     }
 
     @Override
-    public void connect(
+    public Future<Void> connect(
             ChannelHandlerContext ctx,
-            SocketAddress remoteAddress, SocketAddress localAddress,
-            ChannelPromise promise) throws Exception {
+            SocketAddress remoteAddress, SocketAddress localAddress) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
-            outboundHandler.connect(outboundCtx, remoteAddress, localAddress, promise);
+            return outboundHandler.connect(outboundCtx, remoteAddress, localAddress);
         } else {
-            outboundCtx.connect(localAddress, promise);
+            return outboundCtx.connect(remoteAddress, localAddress);
         }
     }
 
     @Override
-    public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public Future<Void> disconnect(ChannelHandlerContext ctx) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
-            outboundHandler.disconnect(outboundCtx, promise);
+            return outboundHandler.disconnect(outboundCtx);
         } else {
-            outboundCtx.disconnect(promise);
+            return outboundCtx.disconnect();
         }
     }
 
     @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public Future<Void> close(ChannelHandlerContext ctx) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
-            outboundHandler.close(outboundCtx, promise);
+            return outboundHandler.close(outboundCtx);
         } else {
-            outboundCtx.close(promise);
+            return outboundCtx.close();
         }
     }
 
     @Override
-    public void register(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public Future<Void> register(ChannelHandlerContext ctx) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
-            outboundHandler.register(outboundCtx, promise);
+            return outboundHandler.register(outboundCtx);
         } else {
-            outboundCtx.register(promise);
+            return outboundCtx.register();
         }
     }
 
     @Override
-    public void deregister(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public Future<Void> deregister(ChannelHandlerContext ctx) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
-            outboundHandler.deregister(outboundCtx, promise);
+            return outboundHandler.deregister(outboundCtx);
         } else {
-            outboundCtx.deregister(promise);
+            return outboundCtx.deregister();
         }
     }
 
     @Override
-    public void read(ChannelHandlerContext ctx) throws Exception {
+    public void read(ChannelHandlerContext ctx) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
             outboundHandler.read(outboundCtx);
@@ -316,17 +317,17 @@ public class CombinedChannelDuplexHandler<I extends ChannelHandler, O extends Ch
     }
 
     @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+    public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
-            outboundHandler.write(outboundCtx, msg, promise);
+            return outboundHandler.write(outboundCtx, msg);
         } else {
-            outboundCtx.write(msg, promise);
+            return outboundCtx.write(msg);
         }
     }
 
     @Override
-    public void flush(ChannelHandlerContext ctx) throws Exception {
+    public void flush(ChannelHandlerContext ctx) {
         assert ctx == outboundCtx.ctx;
         if (!outboundCtx.removed) {
             outboundHandler.flush(outboundCtx);
@@ -426,74 +427,38 @@ public class CombinedChannelDuplexHandler<I extends ChannelHandler, O extends Ch
         }
 
         @Override
-        public ChannelFuture bind(SocketAddress localAddress) {
+        public Future<Void> bind(SocketAddress localAddress) {
             return ctx.bind(localAddress);
         }
 
         @Override
-        public ChannelFuture connect(SocketAddress remoteAddress) {
+        public Future<Void> connect(SocketAddress remoteAddress) {
             return ctx.connect(remoteAddress);
         }
 
         @Override
-        public ChannelFuture connect(SocketAddress remoteAddress, SocketAddress localAddress) {
+        public Future<Void> connect(SocketAddress remoteAddress, SocketAddress localAddress) {
             return ctx.connect(remoteAddress, localAddress);
         }
 
         @Override
-        public ChannelFuture disconnect() {
+        public Future<Void> disconnect() {
             return ctx.disconnect();
         }
 
         @Override
-        public ChannelFuture close() {
+        public Future<Void> close() {
             return ctx.close();
         }
 
         @Override
-        public ChannelFuture register() {
+        public Future<Void> register() {
             return ctx.register();
         }
 
         @Override
-        public ChannelFuture deregister() {
+        public Future<Void> deregister() {
             return ctx.deregister();
-        }
-
-        @Override
-        public ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
-            return ctx.bind(localAddress, promise);
-        }
-
-        @Override
-        public ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
-            return ctx.connect(remoteAddress, promise);
-        }
-
-        @Override
-        public ChannelFuture connect(
-                SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
-            return ctx.connect(remoteAddress, localAddress, promise);
-        }
-
-        @Override
-        public ChannelFuture disconnect(ChannelPromise promise) {
-            return ctx.disconnect(promise);
-        }
-
-        @Override
-        public ChannelFuture close(ChannelPromise promise) {
-            return ctx.close(promise);
-        }
-
-        @Override
-        public ChannelFuture register(ChannelPromise promise) {
-            return ctx.register(promise);
-        }
-
-        @Override
-        public ChannelFuture deregister(ChannelPromise promise) {
-            return ctx.deregister(promise);
         }
 
         @Override
@@ -503,13 +468,8 @@ public class CombinedChannelDuplexHandler<I extends ChannelHandler, O extends Ch
         }
 
         @Override
-        public ChannelFuture write(Object msg) {
+        public Future<Void> write(Object msg) {
             return ctx.write(msg);
-        }
-
-        @Override
-        public ChannelFuture write(Object msg, ChannelPromise promise) {
-            return ctx.write(msg, promise);
         }
 
         @Override
@@ -519,12 +479,7 @@ public class CombinedChannelDuplexHandler<I extends ChannelHandler, O extends Ch
         }
 
         @Override
-        public ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
-            return ctx.writeAndFlush(msg, promise);
-        }
-
-        @Override
-        public ChannelFuture writeAndFlush(Object msg) {
+        public Future<Void> writeAndFlush(Object msg) {
             return ctx.writeAndFlush(msg);
         }
 
@@ -539,28 +494,18 @@ public class CombinedChannelDuplexHandler<I extends ChannelHandler, O extends Ch
         }
 
         @Override
-        public ChannelPromise newPromise() {
+        public Promise<Void> newPromise() {
             return ctx.newPromise();
         }
 
         @Override
-        public ChannelProgressivePromise newProgressivePromise() {
-            return ctx.newProgressivePromise();
-        }
-
-        @Override
-        public ChannelFuture newSucceededFuture() {
+        public Future<Void> newSucceededFuture() {
             return ctx.newSucceededFuture();
         }
 
         @Override
-        public ChannelFuture newFailedFuture(Throwable cause) {
+        public Future<Void> newFailedFuture(Throwable cause) {
             return ctx.newFailedFuture(cause);
-        }
-
-        @Override
-        public ChannelPromise voidPromise() {
-            return ctx.voidPromise();
         }
 
         @Override

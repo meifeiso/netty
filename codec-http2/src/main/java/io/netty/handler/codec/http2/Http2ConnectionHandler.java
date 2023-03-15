@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -17,22 +17,21 @@ package io.netty.handler.codec.http2;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelFutureListeners;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http2.Http2Exception.CompositeStreamException;
 import io.netty.handler.codec.http2.Http2Exception.StreamException;
 import io.netty.util.CharsetUtil;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
+import io.netty.util.concurrent.Promise;
 import io.netty.util.concurrent.ScheduledFuture;
 import io.netty.util.internal.UnstableApi;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
-import java.net.SocketAddress;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static io.netty.buffer.ByteBufUtil.hexDump;
@@ -75,7 +74,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
     private final Http2ConnectionEncoder encoder;
     private final Http2Settings initialSettings;
     private final boolean decoupleCloseAndGoAway;
-    private ChannelFutureListener closeListener;
+    private FutureListener<Object> closeListener;
     private BaseDecoder byteDecoder;
     private long gracefulShutdownTimeoutMillis;
 
@@ -193,7 +192,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
     }
 
     private abstract class BaseDecoder {
-        public abstract void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception;
+        public abstract void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception;
         public void handlerRemoved(ChannelHandlerContext ctx) throws Exception { }
         public void channelActive(ChannelHandlerContext ctx) throws Exception { }
 
@@ -204,7 +203,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
 
             // We need to remove all streams (not just the active ones).
             // See https://github.com/netty/netty/issues/4838.
-            connection().close(ctx.voidPromise());
+            connection().close(ctx.newPromise());
         }
 
         /**
@@ -232,12 +231,12 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
         }
 
         @Override
-        public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        public void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
             try {
                 if (ctx.channel().isActive() && readClientPrefaceString(in) && verifyFirstFrameIsSettings(in)) {
                     // After the preface is read, it is time to hand over control to the post initialized decoder.
                     byteDecoder = new FrameDecoder();
-                    byteDecoder.decode(ctx, in, out);
+                    byteDecoder.decode(ctx, in);
                 }
             } catch (Throwable e) {
                 onError(ctx, false, e);
@@ -320,7 +319,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
          * Peeks at that the next frame in the buffer and verifies that it is a non-ack {@code SETTINGS} frame.
          *
          * @param in the inbound buffer.
-         * @return {@code} true if the next frame is a non-ack {@code SETTINGS} frame, {@code false} if more
+         * @return {@code true} if the next frame is a non-ack {@code SETTINGS} frame, {@code false} if more
          * data is required before we can determine the next frame type.
          * @throws Http2Exception thrown if the next frame is NOT a non-ack {@code SETTINGS} frame.
          */
@@ -353,12 +352,12 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
             final boolean isClient = !connection().isServer();
             if (isClient) {
                 // Clients must send the preface string as the first bytes on the connection.
-                ctx.write(connectionPrefaceBuf()).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+                ctx.write(connectionPrefaceBuf()).addListener(ctx.channel(), ChannelFutureListeners.CLOSE_ON_FAILURE);
             }
 
             // Both client and server must send their initial settings.
-            encoder.writeSettings(ctx, initialSettings, ctx.newPromise()).addListener(
-                    ChannelFutureListener.CLOSE_ON_FAILURE);
+            encoder.writeSettings(ctx, initialSettings)
+                   .addListener(ctx.channel(), ChannelFutureListeners.CLOSE_ON_FAILURE);
 
             if (isClient) {
                 // If this handler is extended by the user and we directly fire the userEvent from this context then
@@ -371,9 +370,9 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
 
     private final class FrameDecoder extends BaseDecoder {
         @Override
-        public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        public void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
             try {
-                decoder.decodeFrame(ctx, in, out);
+                decoder.decodeFrame(ctx, in);
             } catch (Throwable e) {
                 onError(ctx, false, e);
             }
@@ -381,7 +380,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
     }
 
     @Override
-    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+    public void handlerAdded0(ChannelHandlerContext ctx) throws Exception {
         // Initialize the encoder, decoder, flow controllers, and internal state.
         encoder.lifecycleManager(this);
         decoder.lifecycleManager(this);
@@ -432,37 +431,18 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
     }
 
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-        byteDecoder.decode(ctx, in, out);
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        byteDecoder.decode(ctx, in);
     }
 
     @Override
-    public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) throws Exception {
-        ctx.bind(localAddress, promise);
-    }
-
-    @Override
-    public void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress, SocketAddress localAddress,
-                        ChannelPromise promise) throws Exception {
-        ctx.connect(remoteAddress, localAddress, promise);
-    }
-
-    @Override
-    public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        ctx.disconnect(promise);
-    }
-
-    @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public Future<Void> close(ChannelHandlerContext ctx) {
         if (decoupleCloseAndGoAway) {
-            ctx.close(promise);
-            return;
+            return ctx.close();
         }
-        promise = promise.unvoid();
-        // Avoid NotYetConnectedException
-        if (!ctx.channel().isActive()) {
-            ctx.close(promise);
-            return;
+        // Avoid NotYetConnectedException and avoid sending before connection preface
+        if (!ctx.channel().isActive() || !prefaceSent()) {
+            return ctx.close();
         }
 
         // If the user has already sent a GO_AWAY frame they may be attempting to do a graceful shutdown which requires
@@ -470,21 +450,23 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
         // a GO_AWAY has been sent we send a empty buffer just so we can wait to close until all other data has been
         // flushed to the OS.
         // https://github.com/netty/netty/issues/5307
-        ChannelFuture f = connection().goAwaySent() ? ctx.write(EMPTY_BUFFER) : goAway(ctx, null, ctx.newPromise());
+        Future<Void> f = connection().goAwaySent() ? ctx.write(EMPTY_BUFFER) : goAway(ctx, null);
         ctx.flush();
+        Promise<Void> promise = ctx.newPromise();
         doGracefulShutdown(ctx, f, promise);
+        return promise;
     }
 
-    private ChannelFutureListener newClosingChannelFutureListener(
-            ChannelHandlerContext ctx, ChannelPromise promise) {
+    private FutureListener<Object> newClosingChannelFutureListener(
+            ChannelHandlerContext ctx, Promise<Void> promise) {
         long gracefulShutdownTimeoutMillis = this.gracefulShutdownTimeoutMillis;
         return gracefulShutdownTimeoutMillis < 0 ?
                 new ClosingChannelFutureListener(ctx, promise) :
                 new ClosingChannelFutureListener(ctx, promise, gracefulShutdownTimeoutMillis, MILLISECONDS);
     }
 
-    private void doGracefulShutdown(ChannelHandlerContext ctx, ChannelFuture future, final ChannelPromise promise) {
-        final ChannelFutureListener listener = newClosingChannelFutureListener(ctx, promise);
+    private void doGracefulShutdown(ChannelHandlerContext ctx, Future<Void> future, final Promise<Void> promise) {
+        FutureListener<Object> listener = newClosingChannelFutureListener(ctx, promise);
         if (isGracefulShutdownComplete()) {
             // If there are no active streams, close immediately after the GO_AWAY write completes or the timeout
             // elapsed.
@@ -497,39 +479,16 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
             if (closeListener == null) {
                 closeListener = listener;
             } else if (promise != null) {
-                final ChannelFutureListener oldCloseListener = closeListener;
-                closeListener = new ChannelFutureListener() {
-                    @Override
-                    public void operationComplete(ChannelFuture future) throws Exception {
-                        try {
-                            oldCloseListener.operationComplete(future);
-                        } finally {
-                            listener.operationComplete(future);
-                        }
+                FutureListener<Object> oldCloseListener = closeListener;
+                closeListener = future1 -> {
+                    try {
+                        oldCloseListener.operationComplete(future1);
+                    } finally {
+                        listener.operationComplete(future1);
                     }
                 };
             }
         }
-    }
-
-    @Override
-    public void register(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        ctx.register(promise);
-    }
-
-    @Override
-    public void deregister(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-        ctx.deregister(promise);
-    }
-
-    @Override
-    public void read(ChannelHandlerContext ctx) throws Exception {
-        ctx.read();
-    }
-
-    @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        ctx.write(msg, promise);
     }
 
     @Override
@@ -579,7 +538,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
      * @param future If closing, the future after which to close the channel.
      */
     @Override
-    public void closeStreamLocal(Http2Stream stream, ChannelFuture future) {
+    public void closeStreamLocal(Http2Stream stream, Future<Void> future) {
         switch (stream.state()) {
             case HALF_CLOSED_LOCAL:
             case OPEN:
@@ -599,7 +558,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
      * @param future If closing, the future after which to close the channel.
      */
     @Override
-    public void closeStreamRemote(Http2Stream stream, ChannelFuture future) {
+    public void closeStreamRemote(Http2Stream stream, Future<Void> future) {
         switch (stream.state()) {
             case HALF_CLOSED_REMOTE:
             case OPEN:
@@ -612,13 +571,13 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
     }
 
     @Override
-    public void closeStream(final Http2Stream stream, ChannelFuture future) {
+    public void closeStream(final Http2Stream stream, Future<Void> future) {
         stream.close();
 
         if (future.isDone()) {
             checkCloseConnection(future);
         } else {
-            future.addListener((ChannelFutureListener) this::checkCloseConnection);
+            future.addListener(this::checkCloseConnection);
         }
     }
 
@@ -666,8 +625,8 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
             http2Ex = new Http2Exception(INTERNAL_ERROR, cause.getMessage(), cause);
         }
 
-        ChannelPromise promise = ctx.newPromise();
-        ChannelFuture future = goAway(ctx, http2Ex, ctx.newPromise());
+        Promise<Void> promise = ctx.newPromise();
+        Future<Void> future = goAway(ctx, http2Ex);
         if (http2Ex.shutdownHint() == Http2Exception.ShutdownHint.GRACEFUL_SHUTDOWN) {
             doGracefulShutdown(ctx, future, promise);
         } else {
@@ -704,7 +663,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
                 try {
                     stream = encoder.connection().remote().createStream(streamId, true);
                 } catch (Http2Exception e) {
-                    resetUnknownStream(ctx, streamId, http2Ex.error().code(), ctx.newPromise());
+                    resetUnknownStream(ctx, streamId, http2Ex.error().code());
                     return;
                 }
             }
@@ -721,10 +680,10 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
 
         if (stream == null) {
             if (!outbound || connection().local().mayHaveCreatedStream(streamId)) {
-                resetUnknownStream(ctx, streamId, http2Ex.error().code(), ctx.newPromise());
+                resetUnknownStream(ctx, streamId, http2Ex.error().code());
             }
         } else {
-            resetStream(ctx, stream, http2Ex.error().code(), ctx.newPromise());
+            resetStream(ctx, stream, http2Ex.error().code());
         }
     }
 
@@ -736,7 +695,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
      * @param stream the Http2Stream on which the header was received
      */
     protected void handleServerHeaderDecodeSizeError(ChannelHandlerContext ctx, Http2Stream stream) {
-        encoder().writeHeaders(ctx, stream.id(), HEADERS_TOO_LARGE_HEADERS, 0, true, ctx.newPromise());
+        encoder().writeHeaders(ctx, stream.id(), HEADERS_TOO_LARGE_HEADERS, 0, true);
     }
 
     protected Http2FrameWriter frameWriter() {
@@ -748,84 +707,80 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
      * triggered by the first frame of a stream being invalid. That is, there was an error reading the frame before
      * we could create a new stream.
      */
-    private ChannelFuture resetUnknownStream(final ChannelHandlerContext ctx, int streamId, long errorCode,
-                                             ChannelPromise promise) {
-        ChannelFuture future = frameWriter().writeRstStream(ctx, streamId, errorCode, promise);
+    private Future<Void> resetUnknownStream(final ChannelHandlerContext ctx, int streamId, long errorCode) {
+        Future<Void> future = frameWriter().writeRstStream(ctx, streamId, errorCode);
         if (future.isDone()) {
             closeConnectionOnError(ctx, future);
         } else {
-            future.addListener((ChannelFutureListener) future1 -> closeConnectionOnError(ctx, future1));
+            future.addListener(ctx, this::closeConnectionOnError);
         }
         return future;
     }
 
     @Override
-    public ChannelFuture resetStream(final ChannelHandlerContext ctx, int streamId, long errorCode,
-                                     ChannelPromise promise) {
+    public Future<Void> resetStream(final ChannelHandlerContext ctx, int streamId, long errorCode) {
         final Http2Stream stream = connection().stream(streamId);
         if (stream == null) {
-            return resetUnknownStream(ctx, streamId, errorCode, promise.unvoid());
+            return resetUnknownStream(ctx, streamId, errorCode);
         }
 
-       return resetStream(ctx, stream, errorCode, promise);
+       return resetStream(ctx, stream, errorCode);
     }
 
-    private ChannelFuture resetStream(final ChannelHandlerContext ctx, final Http2Stream stream,
-                                      long errorCode, ChannelPromise promise) {
-        promise = promise.unvoid();
+    private Future<Void> resetStream(final ChannelHandlerContext ctx, final Http2Stream stream,
+                                      long errorCode) {
         if (stream.isResetSent()) {
             // Don't write a RST_STREAM frame if we have already written one.
-            return promise.setSuccess();
+            return ctx.newSucceededFuture();
         }
-        final ChannelFuture future;
+        // Synchronously set the resetSent flag to prevent any subsequent calls
+        // from resulting in multiple reset frames being sent.
+        //
+        // This needs to be done before we notify the promise as the promise may have a listener attached that
+        // call resetStream(...) again.
+        stream.resetSent();
+
+        final Future<Void> future;
         // If the remote peer is not aware of the steam, then we are not allowed to send a RST_STREAM
         // https://tools.ietf.org/html/rfc7540#section-6.4.
         if (stream.state() == IDLE ||
             connection().local().created(stream) && !stream.isHeadersSent() && !stream.isPushPromiseSent()) {
-            future = promise.setSuccess();
+            future = ctx.newSucceededFuture();
         } else {
-            future = frameWriter().writeRstStream(ctx, stream.id(), errorCode, promise);
+            future = frameWriter().writeRstStream(ctx, stream.id(), errorCode);
         }
-
-        // Synchronously set the resetSent flag to prevent any subsequent calls
-        // from resulting in multiple reset frames being sent.
-        stream.resetSent();
-
         if (future.isDone()) {
             processRstStreamWriteResult(ctx, stream, future);
         } else {
-            future.addListener((ChannelFutureListener) future1 -> processRstStreamWriteResult(ctx, stream, future1));
+            future.addListener(future1 -> processRstStreamWriteResult(ctx, stream, future1));
         }
 
         return future;
     }
 
     @Override
-    public ChannelFuture goAway(final ChannelHandlerContext ctx, final int lastStreamId, final long errorCode,
-                                final ByteBuf debugData, ChannelPromise promise) {
-        promise = promise.unvoid();
+    public Future<Void> goAway(final ChannelHandlerContext ctx, final int lastStreamId, final long errorCode,
+                                final ByteBuf debugData) {
         final Http2Connection connection = connection();
         try {
             if (!connection.goAwaySent(lastStreamId, errorCode, debugData)) {
                 debugData.release();
-                promise.trySuccess();
-                return promise;
+                return ctx.newSucceededFuture();
             }
         } catch (Throwable cause) {
             debugData.release();
-            promise.tryFailure(cause);
-            return promise;
+            return ctx.newFailedFuture(cause);
         }
 
         // Need to retain before we write the buffer because if we do it after the refCnt could already be 0 and
         // result in an IllegalRefCountException.
         debugData.retain();
-        ChannelFuture future = frameWriter().writeGoAway(ctx, lastStreamId, errorCode, debugData, promise);
+        Future<Void> future = frameWriter().writeGoAway(ctx, lastStreamId, errorCode, debugData);
 
         if (future.isDone()) {
             processGoAwayWriteResult(ctx, lastStreamId, errorCode, debugData, future);
         } else {
-            future.addListener((ChannelFutureListener) future1 ->
+            future.addListener(future1 ->
                     processGoAwayWriteResult(ctx, lastStreamId, errorCode, debugData, future1));
         }
 
@@ -836,11 +791,11 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
      * Closes the connection if the graceful shutdown process has completed.
      * @param future Represents the status that will be passed to the {@link #closeListener}.
      */
-    private void checkCloseConnection(ChannelFuture future) {
+    private void checkCloseConnection(Future<?> future) {
         // If this connection is closing and the graceful shutdown has completed, close the connection
         // once this operation completes.
         if (closeListener != null && isGracefulShutdownComplete()) {
-            ChannelFutureListener closeListener = this.closeListener;
+            FutureListener<Object> closeListener = this.closeListener;
             // This method could be called multiple times
             // and we don't want to notify the closeListener multiple times.
             this.closeListener = null;
@@ -856,23 +811,33 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
      * Close the remote endpoint with with a {@code GO_AWAY} frame. Does <strong>not</strong> flush
      * immediately, this is the responsibility of the caller.
      */
-    private ChannelFuture goAway(ChannelHandlerContext ctx, Http2Exception cause, ChannelPromise promise) {
+    private Future<Void> goAway(ChannelHandlerContext ctx, Http2Exception cause) {
         long errorCode = cause != null ? cause.error().code() : NO_ERROR.code();
-        int lastKnownStream = connection().remote().lastStreamCreated();
-        return goAway(ctx, lastKnownStream, errorCode, Http2CodecUtil.toByteBuf(ctx, cause), promise);
+        int lastKnownStream;
+        if (cause != null && cause.shutdownHint() == Http2Exception.ShutdownHint.HARD_SHUTDOWN) {
+            // The hard shutdown could have been triggered during header processing, before updating
+            // lastStreamCreated(). Specifically, any connection errors encountered by Http2FrameReader or HPACK
+            // decoding will fail to update the last known stream. So we must be pessimistic.
+            // https://github.com/netty/netty/issues/10670
+            lastKnownStream = Integer.MAX_VALUE;
+        } else {
+            lastKnownStream = connection().remote().lastStreamCreated();
+        }
+        return goAway(ctx, lastKnownStream, errorCode, Http2CodecUtil.toByteBuf(ctx, cause));
     }
 
-    private void processRstStreamWriteResult(ChannelHandlerContext ctx, Http2Stream stream, ChannelFuture future) {
+    @SuppressWarnings("unchecked")
+    private void processRstStreamWriteResult(ChannelHandlerContext ctx, Http2Stream stream, Future<?> future) {
         if (future.isSuccess()) {
-            closeStream(stream, future);
+            closeStream(stream, (Future<Void>) future);
         } else {
             // The connection will be closed and so no need to change the resetSent flag to false.
             onConnectionError(ctx, true, future.cause(), null);
         }
     }
 
-    private void closeConnectionOnError(ChannelHandlerContext ctx, ChannelFuture future) {
-        if (!future.isSuccess()) {
+    private void closeConnectionOnError(ChannelHandlerContext ctx, Future<?> future) {
+        if (future.isFailed()) {
             onConnectionError(ctx, true, future.cause(), null);
         }
     }
@@ -885,7 +850,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
     }
 
     private static void processGoAwayWriteResult(final ChannelHandlerContext ctx, final int lastStreamId,
-                                                 final long errorCode, final ByteBuf debugData, ChannelFuture future) {
+                                                 final long errorCode, final ByteBuf debugData, Future<?> future) {
         try {
             if (future.isSuccess()) {
                 if (errorCode != NO_ERROR.code()) {
@@ -913,18 +878,19 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
     /**
      * Closes the channel when the future completes.
      */
-    private static final class ClosingChannelFutureListener implements ChannelFutureListener {
+    private static final class ClosingChannelFutureListener implements FutureListener<Object> {
         private final ChannelHandlerContext ctx;
-        private final ChannelPromise promise;
+        private final Promise<Void> promise;
         private final ScheduledFuture<?> timeoutTask;
+        private boolean closed;
 
-        ClosingChannelFutureListener(ChannelHandlerContext ctx, ChannelPromise promise) {
+        ClosingChannelFutureListener(ChannelHandlerContext ctx, Promise<Void> promise) {
             this.ctx = ctx;
             this.promise = promise;
             timeoutTask = null;
         }
 
-        ClosingChannelFutureListener(final ChannelHandlerContext ctx, final ChannelPromise promise,
+        ClosingChannelFutureListener(final ChannelHandlerContext ctx, final Promise<Void> promise,
                                      long timeout, TimeUnit unit) {
             this.ctx = ctx;
             this.promise = promise;
@@ -932,7 +898,7 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
         }
 
         @Override
-        public void operationComplete(ChannelFuture sentGoAwayFuture) {
+        public void operationComplete(Future<?> sentGoAwayFuture) {
             if (timeoutTask != null) {
                 timeoutTask.cancel(false);
             }
@@ -940,10 +906,24 @@ public class Http2ConnectionHandler extends ByteToMessageDecoder implements Http
         }
 
         private void doClose() {
-            if (promise == null) {
-                ctx.close();
-            } else {
-                ctx.close(promise);
+            // We need to guard against multiple calls as the timeout may trigger close() first and then it will be
+            // triggered again because of operationComplete(...) is called.
+            if (closed) {
+                // This only happens if we also scheduled a timeout task.
+                assert timeoutTask != null;
+                return;
+            }
+            closed = true;
+            // Before trying to close we need to check if the handler still exists in the pipeline as it may
+            // have been removed already.
+            if (!ctx.isRemoved()) {
+                if (promise == null) {
+                    ctx.close();
+                } else {
+                    ctx.close().cascadeTo(promise);
+                }
+            } else if (promise != null) {
+                promise.setSuccess(null);
             }
         }
     }

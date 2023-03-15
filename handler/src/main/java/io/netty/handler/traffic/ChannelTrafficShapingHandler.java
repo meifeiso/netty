@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,9 +15,9 @@
  */
 package io.netty.handler.traffic;
 
-import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufConvertible;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
+import io.netty.util.concurrent.Promise;
 
 import java.util.ArrayDeque;
 import java.util.concurrent.TimeUnit;
@@ -50,7 +50,7 @@ import java.util.concurrent.TimeUnit;
  * </li>
  * <li>In your handler, you should consider to use the {@code channel.isWritable()} and
  * {@code channelWritabilityChanged(ctx)} to handle writability, or through
- * {@code future.addListener(new GenericFutureListener())} on the future returned by
+ * {@code future.addListener(future -> ...)} on the future returned by
  * {@code ctx.write()}.</li>
  * <li><p>You shall also consider to have object size in read or write operations relatively adapted to
  * the bandwidth you required: for instance having 10 MB objects for 10KB/s will lead to burst effect,
@@ -146,12 +146,12 @@ public class ChannelTrafficShapingHandler extends AbstractTrafficShapingHandler 
                     long size = calculateSize(toSend.toSend);
                     trafficCounter.bytesRealWriteFlowControl(size);
                     queueSize -= size;
-                    ctx.write(toSend.toSend, toSend.promise);
+                    ctx.write(toSend.toSend).cascadeTo(toSend.promise);
                 }
             } else {
                 for (ToSend toSend : messagesQueue) {
-                    if (toSend.toSend instanceof ByteBuf) {
-                        ((ByteBuf) toSend.toSend).release();
+                    if (toSend.toSend instanceof ByteBufConvertible) {
+                        ((ByteBufConvertible) toSend.toSend).asByteBuf().release();
                     }
                 }
             }
@@ -165,9 +165,9 @@ public class ChannelTrafficShapingHandler extends AbstractTrafficShapingHandler 
     private static final class ToSend {
         final long relativeTimeAction;
         final Object toSend;
-        final ChannelPromise promise;
+        final Promise<Void> promise;
 
-        private ToSend(final long delay, final Object toSend, final ChannelPromise promise) {
+        private ToSend(final long delay, final Object toSend, final Promise<Void> promise) {
             relativeTimeAction = delay;
             this.toSend = toSend;
             this.promise = promise;
@@ -177,13 +177,13 @@ public class ChannelTrafficShapingHandler extends AbstractTrafficShapingHandler 
     @Override
     void submitWrite(final ChannelHandlerContext ctx, final Object msg,
             final long size, final long delay, final long now,
-            final ChannelPromise promise) {
+            final Promise<Void> promise) {
         final ToSend newToSend;
         // write order control
         synchronized (this) {
             if (delay == 0 && messagesQueue.isEmpty()) {
                 trafficCounter.bytesRealWriteFlowControl(size);
-                ctx.write(msg, promise);
+                ctx.write(msg).cascadeTo(promise);
                 return;
             }
             newToSend = new ToSend(delay + now, msg, promise);
@@ -204,7 +204,7 @@ public class ChannelTrafficShapingHandler extends AbstractTrafficShapingHandler 
                     long size = calculateSize(newToSend.toSend);
                     trafficCounter.bytesRealWriteFlowControl(size);
                     queueSize -= size;
-                    ctx.write(newToSend.toSend, newToSend.promise);
+                    ctx.write(newToSend.toSend).cascadeTo(newToSend.promise);
                 } else {
                     messagesQueue.addFirst(newToSend);
                     break;
