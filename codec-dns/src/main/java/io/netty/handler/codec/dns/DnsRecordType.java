@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -303,6 +303,18 @@ public class DnsRecordType implements Comparable<DnsRecordType> {
      */
     public static final DnsRecordType DLV = new DnsRecordType(0x8001, "DLV");
 
+    /**
+     * Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records).
+     * See <a href="https://www.rfc-editor.org/rfc/rfc9460.html#section-14.1">RFC9460 SVCB RR Type</a>.
+     */
+    public static final DnsRecordType SVCB = new DnsRecordType(0x0040, "SVCB");
+
+    /**
+     * Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records).
+     * See <a href="https://www.rfc-editor.org/rfc/rfc9460.html#section-14.2">RFC9460 HTTPS RR Type</a>.
+     */
+    public static final DnsRecordType HTTPS = new DnsRecordType(0x0041, "HTTPS");
+
     private static final Map<String, DnsRecordType> BY_NAME = new HashMap<String, DnsRecordType>();
     private static final IntObjectHashMap<DnsRecordType> BY_TYPE = new IntObjectHashMap<DnsRecordType>();
     private static final String EXPECTED;
@@ -311,7 +323,7 @@ public class DnsRecordType implements Comparable<DnsRecordType> {
         DnsRecordType[] all = {
                 A, NS, CNAME, SOA, PTR, MX, TXT, RP, AFSDB, SIG, KEY, AAAA, LOC, SRV, NAPTR, KX, CERT, DNAME, OPT, APL,
                 DS, SSHFP, IPSECKEY, RRSIG, NSEC, DNSKEY, DHCID, NSEC3, NSEC3PARAM, TLSA, HIP, SPF, TKEY, TSIG, IXFR,
-                AXFR, ANY, CAA, TA, DLV
+                AXFR, ANY, CAA, TA, DLV, SVCB, HTTPS
         };
 
         final StringBuilder expected = new StringBuilder(512);

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -41,6 +41,9 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 /**
  * Provides the constants for the standard HTTP header names and values and
  * commonly used utility methods that accesses an {@link HttpMessage}.
+ * <p>
+ * Concrete instances of this class are most easily obtained from its default factory:
+ * {@link DefaultHttpHeadersFactory#headersFactory()}.
  */
 public abstract class HttpHeaders implements Iterable<Map.Entry<String, String>> {
     /**
@@ -610,7 +613,7 @@ public abstract class HttpHeaders implements Iterable<Map.Entry<String, String>>
      * If the specified value is not a {@link String}, it is converted into a
      * {@link String} by {@link Object#toString()}, except for {@link Date}
      * and {@link Calendar} which are formatted to the date format defined in
-     * <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>.
+     * <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>.
      */
     @Deprecated
     public static void setHeader(HttpMessage message, CharSequence name, Object value) {
@@ -665,7 +668,7 @@ public abstract class HttpHeaders implements Iterable<Map.Entry<String, String>>
      * If the specified value is not a {@link String}, it is converted into a
      * {@link String} by {@link Object#toString()}, except for {@link Date}
      * and {@link Calendar} which are formatted to the date format defined in
-     * <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>.
+     * <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>.
      */
     @Deprecated
     public static void addHeader(HttpMessage message, CharSequence name, Object value) {
@@ -896,7 +899,7 @@ public abstract class HttpHeaders implements Iterable<Map.Entry<String, String>>
      * Sets a new date header with the specified name and value.  If there
      * is an existing header with the same name, the existing header is removed.
      * The specified value is formatted as defined in
-     * <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>
+     * <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>
      */
     @Deprecated
     public static void setDateHeader(HttpMessage message, CharSequence name, Date value) {
@@ -923,7 +926,7 @@ public abstract class HttpHeaders implements Iterable<Map.Entry<String, String>>
      * Sets a new date header with the specified name and values.  If there
      * is an existing header with the same name, the existing header is removed.
      * The specified values are formatted as defined in
-     * <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>
+     * <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>
      */
     @Deprecated
     public static void setDateHeader(HttpMessage message, CharSequence name, Iterable<Date> values) {
@@ -945,7 +948,7 @@ public abstract class HttpHeaders implements Iterable<Map.Entry<String, String>>
      *
      * Adds a new date header with the specified name and value.  The specified
      * value is formatted as defined in
-     * <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>
+     * <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>
      */
     @Deprecated
     public static void addDateHeader(HttpMessage message, CharSequence name, Date value) {
@@ -1370,7 +1373,7 @@ public abstract class HttpHeaders implements Iterable<Map.Entry<String, String>>
      * If the specified value is not a {@link String}, it is converted
      * into a {@link String} by {@link Object#toString()}, except in the cases
      * of {@link Date} and {@link Calendar}, which are formatted to the date
-     * format defined in <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>.
+     * format defined in <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>.
      *
      * @param name The name of the header being added
      * @param value The value of the header being added
@@ -1448,7 +1451,7 @@ public abstract class HttpHeaders implements Iterable<Map.Entry<String, String>>
      * If the specified value is not a {@link String}, it is converted into a
      * {@link String} by {@link Object#toString()}, except for {@link Date}
      * and {@link Calendar}, which are formatted to the date format defined in
-     * <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>.
+     * <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1">RFC2616</a>.
      *
      * @param name The name of the header being set
      * @param value The value of the header being set

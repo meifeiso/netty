@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -14,6 +14,7 @@
  */
 package io.netty.handler.codec.http2;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.codec.UnsupportedValueConverter;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
@@ -212,12 +213,30 @@ public final class HttpConversionUtil {
      * @throws Http2Exception see {@link #addHttp2ToHttpHeaders(int, Http2Headers, FullHttpMessage, boolean)}
      */
     public static FullHttpResponse toFullHttpResponse(int streamId, Http2Headers http2Headers, ByteBufAllocator alloc,
+                                                      boolean validateHttpHeaders) throws Http2Exception {
+        return toFullHttpResponse(streamId, http2Headers, alloc.buffer(), validateHttpHeaders);
+    }
+
+    /**
+     * Create a new object to contain the response data
+     *
+     * @param streamId The stream associated with the response
+     * @param http2Headers The initial set of HTTP/2 headers to create the response with
+     * @param content {@link ByteBuf} content to put in {@link FullHttpResponse}
+     * @param validateHttpHeaders <ul>
+     *        <li>{@code true} to validate HTTP headers in the http-codec</li>
+     *        <li>{@code false} not to validate HTTP headers in the http-codec</li>
+     *        </ul>
+     * @return A new response object which represents headers/data
+     * @throws Http2Exception see {@link #addHttp2ToHttpHeaders(int, Http2Headers, FullHttpMessage, boolean)}
+     */
+    public static FullHttpResponse toFullHttpResponse(int streamId, Http2Headers http2Headers, ByteBuf content,
                                                       boolean validateHttpHeaders)
                     throws Http2Exception {
         HttpResponseStatus status = parseStatus(http2Headers.status());
         // HTTP/2 does not define a way to carry the version or reason phrase that is included in an
         // HTTP/1.1 status line.
-        FullHttpResponse msg = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, alloc.buffer(),
+        FullHttpResponse msg = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, content,
                                                            validateHttpHeaders);
         try {
             addHttp2ToHttpHeaders(streamId, http2Headers, msg, false);
@@ -245,15 +264,42 @@ public final class HttpConversionUtil {
      * @throws Http2Exception see {@link #addHttp2ToHttpHeaders(int, Http2Headers, FullHttpMessage, boolean)}
      */
     public static FullHttpRequest toFullHttpRequest(int streamId, Http2Headers http2Headers, ByteBufAllocator alloc,
-                                                boolean validateHttpHeaders)
-                    throws Http2Exception {
+                                                    boolean validateHttpHeaders) throws Http2Exception {
+        return toFullHttpRequest(streamId, http2Headers, alloc.buffer(), validateHttpHeaders);
+    }
+
+    private static String extractPath(CharSequence method, Http2Headers headers) {
+        if (HttpMethod.CONNECT.asciiName().contentEqualsIgnoreCase(method)) {
+            // See https://tools.ietf.org/html/rfc7231#section-4.3.6
+            return checkNotNull(headers.authority(),
+                    "authority header cannot be null in the conversion to HTTP/1.x").toString();
+        } else {
+            return checkNotNull(headers.path(),
+                    "path header cannot be null in conversion to HTTP/1.x").toString();
+        }
+    }
+
+    /**
+     * Create a new object to contain the request data
+     *
+     * @param streamId The stream associated with the request
+     * @param http2Headers The initial set of HTTP/2 headers to create the request with
+     * @param content {@link ByteBuf} content to put in {@link FullHttpRequest}
+     * @param validateHttpHeaders <ul>
+     *        <li>{@code true} to validate HTTP headers in the http-codec</li>
+     *        <li>{@code false} not to validate HTTP headers in the http-codec</li>
+     *        </ul>
+     * @return A new request object which represents headers/data
+     * @throws Http2Exception see {@link #addHttp2ToHttpHeaders(int, Http2Headers, FullHttpMessage, boolean)}
+     */
+    public static FullHttpRequest toFullHttpRequest(int streamId, Http2Headers http2Headers, ByteBuf content,
+                                                boolean validateHttpHeaders) throws Http2Exception {
         // HTTP/2 does not define a way to carry the version identifier that is included in the HTTP/1.1 request line.
         final CharSequence method = checkNotNull(http2Headers.method(),
                 "method header cannot be null in conversion to HTTP/1.x");
-        final CharSequence path = checkNotNull(http2Headers.path(),
-                "path header cannot be null in conversion to HTTP/1.x");
+        final CharSequence path = extractPath(method, http2Headers);
         FullHttpRequest msg = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.valueOf(method
-                        .toString()), path.toString(), alloc.buffer(), validateHttpHeaders);
+                        .toString()), path.toString(), content, validateHttpHeaders);
         try {
             addHttp2ToHttpHeaders(streamId, http2Headers, msg, false);
         } catch (Http2Exception e) {
@@ -283,8 +329,7 @@ public final class HttpConversionUtil {
         // HTTP/2 does not define a way to carry the version identifier that is included in the HTTP/1.1 request line.
         final CharSequence method = checkNotNull(http2Headers.method(),
                 "method header cannot be null in conversion to HTTP/1.x");
-        final CharSequence path = checkNotNull(http2Headers.path(),
-                "path header cannot be null in conversion to HTTP/1.x");
+        final CharSequence path = extractPath(method, http2Headers);
         HttpRequest msg = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.valueOf(method.toString()),
                 path.toString(), validateHttpHeaders);
         try {
@@ -318,7 +363,7 @@ public final class HttpConversionUtil {
         // HTTP/1.1 status line.
         final HttpResponse msg = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, validateHttpHeaders);
         try {
-            addHttp2ToHttpHeaders(streamId, http2Headers, msg.headers(), msg.protocolVersion(), false, true);
+            addHttp2ToHttpHeaders(streamId, http2Headers, msg.headers(), msg.protocolVersion(), false, false);
         } catch (final Http2Exception e) {
             throw e;
         } catch (final Throwable t) {
@@ -331,15 +376,15 @@ public final class HttpConversionUtil {
      * Translate and add HTTP/2 headers to HTTP/1.x headers.
      *
      * @param streamId The stream associated with {@code sourceHeaders}.
-     * @param sourceHeaders The HTTP/2 headers to convert.
+     * @param inputHeaders The HTTP/2 headers to convert.
      * @param destinationMessage The object which will contain the resulting HTTP/1.x headers.
      * @param addToTrailer {@code true} to add to trailing headers. {@code false} to add to initial headers.
      * @throws Http2Exception If not all HTTP/2 headers can be translated to HTTP/1.x.
      * @see #addHttp2ToHttpHeaders(int, Http2Headers, HttpHeaders, HttpVersion, boolean, boolean)
      */
-    public static void addHttp2ToHttpHeaders(int streamId, Http2Headers sourceHeaders,
+    public static void addHttp2ToHttpHeaders(int streamId, Http2Headers inputHeaders,
                     FullHttpMessage destinationMessage, boolean addToTrailer) throws Http2Exception {
-        addHttp2ToHttpHeaders(streamId, sourceHeaders,
+        addHttp2ToHttpHeaders(streamId, inputHeaders,
                 addToTrailer ? destinationMessage.trailingHeaders() : destinationMessage.headers(),
                 destinationMessage.protocolVersion(), addToTrailer, destinationMessage instanceof HttpRequest);
     }
@@ -390,16 +435,19 @@ public final class HttpConversionUtil {
         final Http2Headers out = new DefaultHttp2Headers(validateHeaders, inHeaders.size());
         if (in instanceof HttpRequest) {
             HttpRequest request = (HttpRequest) in;
-            URI requestTargetUri = URI.create(request.uri());
-            out.path(toHttp2Path(requestTargetUri));
-            out.method(request.method().asciiName());
-            setHttp2Scheme(inHeaders, requestTargetUri, out);
-
-            if (!isOriginForm(requestTargetUri) && !isAsteriskForm(requestTargetUri)) {
-                // Attempt to take from HOST header before taking from the request-line
-                String host = inHeaders.getAsString(HttpHeaderNames.HOST);
-                setHttp2Authority((host == null || host.isEmpty()) ? requestTargetUri.getAuthority() : host, out);
+            String host = inHeaders.getAsString(HttpHeaderNames.HOST);
+            if (isOriginForm(request.uri()) || isAsteriskForm(request.uri())) {
+                out.path(new AsciiString(request.uri()));
+                setHttp2Scheme(inHeaders, out);
+            } else {
+                URI requestTargetUri = URI.create(request.uri());
+                out.path(toHttp2Path(requestTargetUri));
+                // Take from the request-line if HOST header was empty
+                host = isNullOrEmpty(host) ? requestTargetUri.getAuthority() : host;
+                setHttp2Scheme(inHeaders, requestTargetUri, out);
             }
+            setHttp2Authority(host, out);
+            out.method(request.method().asciiName());
         } else if (in instanceof HttpResponse) {
             HttpResponse response = (HttpResponse) in;
             out.status(response.status().codeAsText());
@@ -486,35 +534,62 @@ public final class HttpConversionUtil {
                 if (aName.contentEqualsIgnoreCase(TE)) {
                     toHttp2HeadersFilterTE(entry, out);
                 } else if (aName.contentEqualsIgnoreCase(COOKIE)) {
-                    AsciiString value = AsciiString.of(entry.getValue());
-                    // split up cookies to allow for better compression
-                    // https://tools.ietf.org/html/rfc7540#section-8.1.2.5
-                    try {
-                        int index = value.forEachByte(FIND_SEMI_COLON);
-                        if (index != -1) {
-                            int start = 0;
-                            do {
-                                out.add(COOKIE, value.subSequence(start, index, false));
-                                // skip 2 characters "; " (see https://tools.ietf.org/html/rfc6265#section-4.2.1)
-                                start = index + 2;
-                            } while (start < value.length() &&
-                                    (index = value.forEachByte(start, value.length() - start, FIND_SEMI_COLON)) != -1);
-                            if (start >= value.length()) {
-                                throw new IllegalArgumentException("cookie value is of unexpected format: " + value);
+                    CharSequence valueCs = entry.getValue();
+                    // validate
+                    boolean invalid = false;
+                    for (int i = 0; i < valueCs.length(); i++) {
+                        char c = valueCs.charAt(i);
+                        if (c == ';') {
+                            if (i + 1 >= valueCs.length() || valueCs.charAt(i + 1) != ' ') {
+                                // semicolon not followed by space. invalid, don't split
+                                invalid = true;
+                                break;
                             }
-                            out.add(COOKIE, value.subSequence(start, value.length(), false));
-                        } else {
-                            out.add(COOKIE, value);
+                            i++; // skip space
+                        } else if (c > 255) {
+                            // not ascii, don't split
+                            invalid = true;
+                            break;
                         }
-                    } catch (Exception e) {
-                        // This is not expect to happen because FIND_SEMI_COLON never throws but must be caught
-                        // because of the ByteProcessor interface.
-                        throw new IllegalStateException(e);
+                    }
+
+                    if (invalid) {
+                        out.add(COOKIE, valueCs);
+                    } else {
+                        splitValidCookieHeader(out, valueCs);
                     }
                 } else {
                     out.add(aName, entry.getValue());
                 }
             }
+        }
+    }
+
+    private static void splitValidCookieHeader(Http2Headers out, CharSequence valueCs) {
+        try {
+            AsciiString value = AsciiString.of(valueCs);
+            // split up cookies to allow for better compression
+            // https://tools.ietf.org/html/rfc7540#section-8.1.2.5
+            int index = value.forEachByte(FIND_SEMI_COLON);
+            if (index != -1) {
+                int start = 0;
+                do {
+                    out.add(COOKIE, value.subSequence(start, index, false));
+                    assert index + 1 < value.length();
+                    assert value.charAt(index + 1) == ' ';
+                    // skip 2 characters "; " (see https://tools.ietf.org/html/rfc6265#section-4.2.1)
+                    start = index + 2;
+                } while (start < value.length() &&
+                        (index = value.forEachByte(start, value.length() - start, FIND_SEMI_COLON)) != -1);
+                assert start < value.length();
+                out.add(COOKIE, value.subSequence(start, value.length(), false));
+            } else {
+                out.add(COOKIE, value);
+            }
+        } catch (Exception e) {
+            // This is not expect to happen because FIND_SEMI_COLON never throws but must be caught
+            // because of the ByteProcessor interface.
+            throw new IllegalStateException(e);
         }
     }
 
@@ -557,9 +632,13 @@ public final class HttpConversionUtil {
         }
     }
 
+    private static void setHttp2Scheme(HttpHeaders in, Http2Headers out) {
+        setHttp2Scheme(in, URI.create(""), out);
+    }
+
     private static void setHttp2Scheme(HttpHeaders in, URI uri, Http2Headers out) {
         String value = uri.getScheme();
-        if (value != null) {
+        if (!isNullOrEmpty(value)) {
             out.scheme(new AsciiString(value));
             return;
         }
@@ -619,7 +698,7 @@ public final class HttpConversionUtil {
             translations = request ? REQUEST_HEADER_TRANSLATIONS : RESPONSE_HEADER_TRANSLATIONS;
         }
 
-        public void translateHeaders(Iterable<Entry<CharSequence, CharSequence>> inputHeaders) throws Http2Exception {
+        void translateHeaders(Iterable<Entry<CharSequence, CharSequence>> inputHeaders) throws Http2Exception {
             // lazily created as needed
             StringBuilder cookies = null;
 
