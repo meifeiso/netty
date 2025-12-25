@@ -16,14 +16,11 @@
 
 package io.netty.handler.codec.http2;
 
-import io.netty.util.internal.UnstableApi;
-
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 /**
  * Builder for the {@link Http2FrameCodec}.
  */
-@UnstableApi
 public class Http2FrameCodecBuilder extends
         AbstractHttp2ConnectionHandlerBuilder<Http2FrameCodec, Http2FrameCodecBuilder> {
 
@@ -198,6 +195,12 @@ public class Http2FrameCodecBuilder extends
     public Http2FrameCodecBuilder decoderEnforceMaxRstFramesPerWindow(
             int maxRstFramesPerWindow, int secondsPerWindow) {
         return super.decoderEnforceMaxRstFramesPerWindow(maxRstFramesPerWindow, secondsPerWindow);
+    }
+
+    @Override
+    public Http2FrameCodecBuilder encoderEnforceMaxRstFramesPerWindow(
+            int maxRstFramesPerWindow, int secondsPerWindow) {
+        return super.encoderEnforceMaxRstFramesPerWindow(maxRstFramesPerWindow, secondsPerWindow);
     }
 
     /**

@@ -133,11 +133,23 @@ done:
     return obj;
 }
 
-static jobject createDomainDatagramSocketAddress(JNIEnv* env, const struct sockaddr_storage* addr, int len, jobject local) {
+static int domainSocketPathLength(const struct sockaddr_un* s, const socklen_t addrlen) {
+#ifdef __linux__
+    // Linux supports abstract domain sockets so we need to handle it.
+    // https://man7.org/linux/man-pages/man7/unix.7.html
+    if (addrlen >= sizeof(sa_family_t) && s->sun_path[0] == '\0') {
+       // This is an abstract domain socket address
+       return (addrlen - sizeof(sa_family_t));
+    }
+#endif
+    return strlen(s->sun_path);
+}
+
+static jobject createDomainDatagramSocketAddress(JNIEnv* env, const struct sockaddr_storage* addr, const socklen_t addrlen, int len, jobject local) {
     jclass domainDatagramSocketAddressClass = NULL;
     jobject obj  = NULL;
     struct sockaddr_un* s = (struct sockaddr_un*) addr;
-    int pathLength = strlen(s->sun_path);
+    int pathLength = domainSocketPathLength(s, addrlen);
     jbyteArray pathBytes = (*env)->NewByteArray(env, pathLength);
     if (pathBytes == NULL) {
         return NULL;
@@ -157,9 +169,9 @@ done:
     return obj;
 }
 
-static jbyteArray netty_unix_socket_createDomainSocketAddressArray(JNIEnv* env, const struct sockaddr_storage* addr) {
+static jbyteArray netty_unix_socket_createDomainSocketAddressArray(JNIEnv* env, const struct sockaddr_storage* addr, const socklen_t addrlen) {
     struct sockaddr_un* s = (struct sockaddr_un*) addr;
-    int pathLength = strlen(s->sun_path);
+    int pathLength = domainSocketPathLength(s, addrlen);
     jbyteArray pathBytes = (*env)->NewByteArray(env, pathLength);
     if (pathBytes == NULL) {
         return NULL;
@@ -384,6 +396,9 @@ static jint _sendToDomainSocket(JNIEnv* env, jint fd, void* buffer, jint pos, ji
     addr.sun_family = AF_UNIX;
 
     jbyte* socket_path = (*env)->GetByteArrayElements(env, socketPath, 0);
+    if (socket_path == NULL) {
+        return -1;
+    }
     socket_path_len = (*env)->GetArrayLength(env, socketPath);
     if (socket_path_len > sizeof(addr.sun_path)) {
         socket_path_len = sizeof(addr.sun_path);
@@ -443,7 +458,7 @@ static jobject _recvFromDomainSocket(JNIEnv* env, jint fd, void* buffer, jint po
     int err;
 
     do {
-        bzero(&addr, sizeof(addr)); // Zap addr so we can strlen(addr.sun_path) later. See unix(4).
+        memset(&addr, 0, sizeof(addr)); // Zap addr so we can strlen(addr.sun_path) later. See unix(4).
         res = recvfrom(fd, buffer + pos, (size_t) (limit - pos), 0, (struct sockaddr*) &addr, &addrlen);
         // Keep on reading if it was interrupted
     } while (res == -1 && ((err = errno) == EINTR));
@@ -461,7 +476,7 @@ static jobject _recvFromDomainSocket(JNIEnv* env, jint fd, void* buffer, jint po
         return NULL;
     }
 
-    return createDomainDatagramSocketAddress(env, &addr, res, NULL);
+    return createDomainDatagramSocketAddress(env, &addr, addrlen, res, NULL);
 }
 
 static jint _send(JNIEnv* env, jclass clazz, jint fd, void* buffer, jint pos, jint limit) {
@@ -706,7 +721,7 @@ static jbyteArray netty_unix_socket_remoteDomainSocketAddress(JNIEnv* env, jclas
     if (getpeername(fd, (struct sockaddr*) &addr, &len) == -1) {
         return NULL;
     }
-    return netty_unix_socket_createDomainSocketAddressArray(env, &addr);
+    return netty_unix_socket_createDomainSocketAddressArray(env, &addr, len);
 }
 
 static jbyteArray netty_unix_socket_localAddress(JNIEnv* env, jclass clazz, jint fd) {
@@ -724,7 +739,7 @@ static jbyteArray netty_unix_socket_localDomainSocketAddress(JNIEnv* env, jclass
     if (getsockname(fd, (struct sockaddr*) &addr, &len) == -1) {
         return NULL;
     }
-    return netty_unix_socket_createDomainSocketAddressArray(env, &addr);
+    return netty_unix_socket_createDomainSocketAddressArray(env, &addr, len);
 }
 
 static jint netty_unix_socket_newSocketDgramFd(JNIEnv* env, jclass clazz, jboolean ipv6) {
@@ -805,6 +820,9 @@ static jint netty_unix_socket_sendToAddressesDomainSocket(JNIEnv* env, jclass cl
     addr.sun_family = AF_UNIX;
 
     jbyte* socket_path = (*env)->GetByteArrayElements(env, socketPath, 0);
+    if (socket_path == NULL) {
+        return -1;
+    }
     socket_path_len = (*env)->GetArrayLength(env, socketPath);
     if (socket_path_len > sizeof(addr.sun_path)) {
         socket_path_len = sizeof(addr.sun_path);
@@ -857,6 +875,9 @@ static jint netty_unix_socket_bindDomainSocket(JNIEnv* env, jclass clazz, jint f
     addr.sun_family = AF_UNIX;
 
     jbyte* socket_path = (*env)->GetByteArrayElements(env, socketPath, 0);
+    if (socket_path == NULL) {
+        return -1;
+    }
     jint socket_path_len = (*env)->GetArrayLength(env, socketPath);
 
     if (socket_path_len > sizeof(addr.sun_path) || (socket_path_len == sizeof(addr.sun_path) && socket_path[socket_path_len] != '\0')) {
@@ -886,6 +907,9 @@ static jint netty_unix_socket_connectDomainSocket(JNIEnv* env, jclass clazz, jin
     addr.sun_family = AF_UNIX;
 
     jbyte* socket_path = (*env)->GetByteArrayElements(env, socketPath, 0);
+    if (socket_path == NULL) {
+        return -1;
+    }
     socket_path_len = (*env)->GetArrayLength(env, socketPath);
 
     if (socket_path_len > sizeof(addr.sun_path) || (socket_path_len == sizeof(addr.sun_path) && socket_path[socket_path_len] != '\0')) {
@@ -1157,6 +1181,9 @@ static void netty_unix_socket_setIntOpt(JNIEnv* env, jclass clazz, jint fd, jint
 
 static void netty_unix_socket_setRawOptArray(JNIEnv* env, jclass clazz, jint fd, jint level, jint optname, jbyteArray inArray, jint offset, jint len) {
     jbyte* optval = (*env)->GetByteArrayElements(env, inArray, 0);
+    if (optval == NULL) {
+        return;
+    }
     netty_unix_socket_setOption(env, fd, level, optname, optval + offset, len);
     (*env)->ReleaseByteArrayElements(env, inArray, optval, 0);
 }
@@ -1175,6 +1202,9 @@ static jint netty_unix_socket_getIntOpt(JNIEnv* env, jclass clazz, jint fd, jint
 
 static void netty_unix_socket_getRawOptArray(JNIEnv* env, jclass clazz, jint fd, jint level, jint optname, jbyteArray outArray, jint offset, jint len) {
     jbyte* optval = (*env)->GetByteArrayElements(env, outArray, 0);
+    if (optval == NULL) {
+        return;
+    }
     netty_unix_socket_getOption(env, fd, level, optname, optval + offset, len);
     (*env)->ReleaseByteArrayElements(env, outArray, optval, 0);
 }
